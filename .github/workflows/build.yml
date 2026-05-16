@@ -1,0 +1,53 @@
+name: Build (smoke)
+
+# Unsigned smoke build to catch breakage on every push/PR. Tagged releases
+# are handled by release.yml — skip this on tags to avoid wasted CI minutes.
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (unsigned)
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache ffmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: AudiobookForge/Resources/bin
+          key: ffmpeg-universal-v1
+
+      - name: Fetch ffmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: ./scripts/fetch-ffmpeg.sh
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build
+        run: ./scripts/build.sh release
+
+      - name: Zip .app for artifact
+        run: |
+          cd build/Build/Products/Release
+          zip -ry "$GITHUB_WORKSPACE/AudiobookForge-unsigned.zip" AudiobookForge.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudiobookForge-unsigned
+          path: AudiobookForge-unsigned.zip
+          retention-days: 7

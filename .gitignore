@@ -1,0 +1,29 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Generated
+AudiobookForge.xcodeproj/
+AudiobookForge/Resources/bin/
+
+# macOS
+.DS_Store
+
+# Build artifacts
+*.app
+*.dmg
+*.pkg
+*.ipa
+*.xcarchive
+
+# Swift
+.swiftpm/
+Package.resolved
+
+# Logs
+*.log

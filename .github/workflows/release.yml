@@ -1,0 +1,235 @@
+name: Release
+
+# Cuts a signed + notarized DMG and publishes it as a GitHub Release.
+# Trigger: push a tag matching `v*` (e.g. `git tag v0.1.0 && git push --tags`).
+# Manual re-runs are allowed via workflow_dispatch with an explicit version.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (without leading v). Defaults to current tag."
+        required: false
+
+permissions:
+  contents: write  # needed to create GitHub Releases
+
+jobs:
+  release:
+    name: Build, sign, notarize, publish
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # for git rev-list --count
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          BUILD=$(git rev-list --count HEAD)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD"     >> "$GITHUB_OUTPUT"
+          echo "Version=$VERSION  Build=$BUILD"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install build tools
+        run: brew install xcodegen create-dmg
+
+      - name: Cache ffmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: AudiobookForge/Resources/bin
+          key: ffmpeg-universal-v1
+
+      - name: Fetch ffmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: ./scripts/fetch-ffmpeg.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Import Developer ID Application cert
+        env:
+          CERT_P12_BASE64:   ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD:     ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create an isolated keychain for this run so the cert is gone
+          # when the runner is torn down.
+          KEYCHAIN_PWD=$(uuidgen)
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo -n "$CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain    -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600     "$KEYCHAIN_PATH"
+          security unlock-keychain    -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH" >/dev/null
+          # Prepend to the search list so xcodebuild finds it without
+          # touching the default login keychain.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"' | xargs)
+
+          rm -f "$CERT_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Render ExportOptions.plist
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          mkdir -p build
+          envsubst < scripts/ExportOptions.plist > build/ExportOptions.plist
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project AudiobookForge.xcodeproj \
+            -scheme AudiobookForge \
+            -configuration Release \
+            -derivedDataPath build \
+            -archivePath build/AudiobookForge.xcarchive \
+            MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build }}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            "CODE_SIGN_IDENTITY=Developer ID Application" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
+            archive
+
+      - name: Export signed .app
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/AudiobookForge.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export
+
+      - name: Stage notary credentials
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo -n "$APPLE_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Notarize .app
+        env:
+          APPLE_API_KEY_ID:    ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: ./scripts/notarize.sh build/export/AudiobookForge.app
+
+      - name: Build DMG
+        run: |
+          mkdir -p dist
+          ./scripts/make-dmg.sh \
+            build/export/AudiobookForge.app \
+            "dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg"
+
+      - name: Sign DMG
+        run: |
+          codesign --sign "Developer ID Application" --timestamp \
+            "dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg"
+
+      - name: Notarize DMG
+        env:
+          APPLE_API_KEY_ID:    ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: ./scripts/notarize.sh "dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg"
+
+      - name: Wipe transient secrets
+        if: always()
+        run: |
+          rm -f "$APPLE_API_KEY_PATH"
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+      - name: Capture bundled ffmpeg version
+        id: ffmpeg_info
+        run: |
+          # Pull the first line of `ffmpeg -version`, which is the canonical
+          # banner: "ffmpeg version N.N.N Copyright …". Used in the
+          # attribution footer below.
+          FFMPEG_BIN="AudiobookForge/Resources/bin/ffmpeg"
+          BANNER=$("$FFMPEG_BIN" -version | head -1)
+          # Extract just the version token (third word of the banner).
+          FF_VERSION=$(echo "$BANNER" | awk '{print $3}')
+          echo "banner=$BANNER"          >> "$GITHUB_OUTPUT"
+          echo "version=$FF_VERSION"     >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        env:
+          FF_BANNER:  ${{ steps.ffmpeg_info.outputs.banner }}
+          FF_VERSION: ${{ steps.ffmpeg_info.outputs.version }}
+        run: |
+          PREV=$(git tag --sort=-creatordate | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
+          {
+            echo "## AudiobookForge ${{ steps.ver.outputs.version }}"
+            echo
+            if [[ -n "$PREV" ]]; then
+              echo "### Changes since $PREV"
+              git log --pretty='- %s' "$PREV..HEAD" -- ':!.github' ':!docs' | head -50
+            else
+              echo "First tagged release."
+            fi
+            echo
+            echo "### Install"
+            echo "1. Download the DMG below"
+            echo "2. Open it and drag AudiobookForge into Applications"
+            echo "3. Launch from Launchpad or Spotlight — first launch is silent (the app is notarized by Apple)"
+            echo
+            echo "---"
+            echo
+            echo "### Open-source components"
+            echo
+            echo "AudiobookForge bundles a copy of **FFmpeg** (\`$FF_BANNER\`) for"
+            echo "audio decoding, AAC encoding, and MP4 muxing. FFmpeg is distributed"
+            echo "under the **GNU GPL v2 (or later)** for the build configuration used"
+            echo "here (which includes GPL components such as x264 and x265)."
+            echo
+            echo "- **Upstream source for this exact FFmpeg version:**"
+            echo "  <https://github.com/FFmpeg/FFmpeg/releases/tag/n$FF_VERSION>"
+            echo "  (tarball: <https://ffmpeg.org/releases/ffmpeg-$FF_VERSION.tar.xz>)"
+            echo "- **Prebuilt static-binary source notes (macOS arm64 + x86_64):**"
+            echo "  <https://www.osxexperts.net> and <https://evermeet.cx/ffmpeg/>"
+            echo "- **GPL v2 license text:** <https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>"
+            echo
+            echo "Per the GPL, the corresponding source code for the FFmpeg version"
+            echo "bundled with this release is available at the upstream link above"
+            echo "for at least three years from the date of this release. If that"
+            echo "link is ever broken, open an issue on this repo and we'll provide"
+            echo "the source by other means."
+            echo
+            echo "AudiobookForge's own source is at <https://github.com/${GITHUB_REPOSITORY}>"
+            echo "and is not GPL-encumbered — only the bundled FFmpeg binary is."
+          } > release_notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg" \
+            --title "AudiobookForge ${{ steps.ver.outputs.version }}" \
+            --notes-file release_notes.md
+
+      - name: Upload artifact (for manual inspection)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudiobookForge-${{ steps.ver.outputs.version }}-dmg
+          path: dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg
+          retention-days: 14
