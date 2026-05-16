@@ -18,6 +18,10 @@ encode queue.**
 [Releases](https://github.com/bensquire/AudiobookForge/releases) ·
 [Releasing docs](RELEASING.md)
 
+<br/>
+
+<img src="images/screenshot.png" alt="AudiobookForge — three-pane layout: chapters, metadata, queue" width="900"/>
+
 </div>
 
 Think Audiobook Builder, but with one-shot drag-folder UX, real metadata
