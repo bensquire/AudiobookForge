@@ -38,10 +38,20 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
+          # Apple's CFBundleShortVersionString must be a numeric X.Y.Z, so
+          # strip any prerelease suffix (`0.1.0-alpha.1` → `0.1.0`) for the
+          # build-time version. The full tag still drives the DMG filename
+          # and the GitHub Release title.
+          NUMERIC_VERSION="${VERSION%%-*}"
           BUILD=$(git rev-list --count HEAD)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD"     >> "$GITHUB_OUTPUT"
-          echo "Version=$VERSION  Build=$BUILD"
+          IS_PRERELEASE=false
+          [[ "$VERSION" == *-* ]] && IS_PRERELEASE=true
+
+          echo "version=$VERSION"                 >> "$GITHUB_OUTPUT"
+          echo "numeric_version=$NUMERIC_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD"                     >> "$GITHUB_OUTPUT"
+          echo "prerelease=$IS_PRERELEASE"        >> "$GITHUB_OUTPUT"
+          echo "Version=$VERSION  Numeric=$NUMERIC_VERSION  Build=$BUILD  Prerelease=$IS_PRERELEASE"
 
       - name: Install build tools
         run: brew install xcodegen create-dmg
@@ -104,7 +114,7 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             -archivePath build/AudiobookForge.xcarchive \
-            MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
+            MARKETING_VERSION="${{ steps.ver.outputs.numeric_version }}" \
             CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build }}" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
@@ -223,10 +233,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          PRERELEASE_FLAG=""
+          if [[ "${{ steps.ver.outputs.prerelease }}" == "true" ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
           gh release create "${GITHUB_REF_NAME}" \
             "dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg" \
             --title "AudiobookForge ${{ steps.ver.outputs.version }}" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            $PRERELEASE_FLAG
 
       - name: Upload artifact (for manual inspection)
         uses: actions/upload-artifact@v4
