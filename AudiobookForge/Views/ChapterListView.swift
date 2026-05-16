@@ -28,7 +28,7 @@ struct ChapterListView: View {
             allowedContentTypes: [.audio, .mp3, .folder],
             allowsMultipleSelection: true
         ) { result in
-            if case .success(let urls) = result {
+            if case let .success(urls) = result {
                 Task { await importPaths(urls) }
             }
         }
@@ -49,7 +49,8 @@ struct ChapterListView: View {
     private func chapterTable(bindable: Bindable<AudiobookProject>) -> some View {
         let chapters = bindable.wrappedValue.chapters
         let indexByID = Dictionary(
-            uniqueKeysWithValues: chapters.enumerated().map { ($1.id, $0) })
+            uniqueKeysWithValues: chapters.enumerated().map { ($1.id, $0) }
+        )
 
         Table(chapters, selection: $selection) {
             TableColumn("#") { chap in
@@ -145,7 +146,10 @@ struct ChapterListView: View {
                 }
             }
             // Natural sort so "Chapter 2" precedes "Chapter 10".
-            results.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            results
+                .sort {
+                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }
             return results
         }.value
 
@@ -154,10 +158,12 @@ struct ChapterListView: View {
             of: (Int, URL, AudioProbe.Probed).self
         ) { group in
             for (i, url) in files.enumerated() {
-                group.addTask { (i, url, await AudioProbe.probe(url)) }
+                group.addTask { await (i, url, AudioProbe.probe(url)) }
             }
             var out: [(Int, URL, AudioProbe.Probed)] = []
-            for await item in group { out.append(item) }
+            for await item in group {
+                out.append(item)
+            }
             return out.sorted { $0.0 < $1.0 }
         }
 
@@ -181,7 +187,6 @@ struct ChapterListView: View {
             project.chapters.append(contentsOf: added)
         }
     }
-
 }
 
 private let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "wav", "flac", "ogg", "opus"]
@@ -191,5 +196,7 @@ private func isAudio(_ url: URL) -> Bool {
 }
 
 private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
 }

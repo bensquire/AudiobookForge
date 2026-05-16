@@ -7,7 +7,7 @@ struct EncodeSpec {
     var chapters: [Chapter]
     var metadata: BookMetadata
     var settings: EncodeSettings
-    var outputURL: URL              // final on-disk destination (already deduped)
+    var outputURL: URL // final on-disk destination (already deduped)
 
     var totalDuration: TimeInterval {
         chapters.reduce(0) { $0 + $1.duration }
@@ -46,7 +46,8 @@ final class EncodeJob {
         let parent = finalURL.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(
-                at: parent, withIntermediateDirectories: true)
+                at: parent, withIntermediateDirectories: true
+            )
         } catch {
             throw EncodeError.outputUnavailable(parent.path, error.localizedDescription)
         }
@@ -54,12 +55,14 @@ final class EncodeJob {
         // Encode to a sibling `.partial` then rename — if we crash or get
         // cancelled the user is never left with a stub at the final path.
         let partialURL = parent.appendingPathComponent(
-            finalURL.lastPathComponent + ".partial")
+            finalURL.lastPathComponent + ".partial"
+        )
         try? FileManager.default.removeItem(at: partialURL)
 
         let workDir = try FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
-            appropriateFor: finalURL, create: true)
+            appropriateFor: finalURL, create: true
+        )
         defer { try? FileManager.default.removeItem(at: workDir) }
 
         let concatURL = workDir.appendingPathComponent("concat.txt")
@@ -89,7 +92,7 @@ final class EncodeJob {
             "-f", "concat",
             "-safe", "0",
             "-i", concatURL.path,
-            "-i", metaURL.path,
+            "-i", metaURL.path
         ]
         if let cover = coverURL { args += ["-i", cover.path] }
         args += ["-map", "0:a", "-map_metadata", "1", "-map_chapters", "1"]
@@ -99,7 +102,7 @@ final class EncodeJob {
                 "-c:v", "mjpeg",
                 "-disposition:v:0", "attached_pic",
                 "-metadata:s:v", "title=Album cover",
-                "-metadata:s:v", "comment=Cover (front)",
+                "-metadata:s:v", "comment=Cover (front)"
             ]
         }
         if remux {
@@ -107,14 +110,14 @@ final class EncodeJob {
         } else {
             args += [
                 "-c:a", spec.settings.codec.rawValue,
-                "-b:a", bitrate,
+                "-b:a", bitrate
             ]
         }
         args += [
             "-threads", "0",
             "-movflags", "+faststart",
             "-f", "mp4",
-            partialURL.path,
+            partialURL.path
         ]
 
         do {
@@ -164,8 +167,8 @@ final class EncodeJob {
         guard let first = chapters.first, first.codec.isMP4RemuxFriendly else { return false }
         return chapters.dropFirst().allSatisfy {
             $0.codec == first.codec
-            && $0.sampleRate == first.sampleRate
-            && $0.channels == first.channels
+                && $0.sampleRate == first.sampleRate
+                && $0.channels == first.channels
         }
     }
 
@@ -190,13 +193,14 @@ final class EncodeJob {
     /// Used at enqueue time to compute `plannedOutputURL` before any encode
     /// has run — this is what we surface in the queue UI.
     nonisolated static func resolveOutputURL(in base: URL, metadata: BookMetadata,
-                                             template: String) -> URL {
+                                             template: String) -> URL
+    {
         var path = template
         let tokens: [(String, String)] = [
             ("{title}", metadata.title),
             ("{author}", metadata.author),
             ("{series}", metadata.series),
-            ("{year}", metadata.year),
+            ("{year}", metadata.year)
         ]
         for (token, value) in tokens {
             path = path.replacingOccurrences(of: token, with: sanitize(value))
@@ -204,10 +208,10 @@ final class EncodeJob {
         return base.appendingPathComponent(path)
     }
 
-    nonisolated private static func sanitize(_ s: String) -> String {
+    private nonisolated static func sanitize(_ s: String) -> String {
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
         return s.components(separatedBy: illegal).joined(separator: "_")
-                .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: .whitespaces)
     }
 }
 
@@ -219,15 +223,15 @@ enum EncodeError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingSourceFile(let url):
-            return "Source file no longer found: \(url.lastPathComponent). "
+        case let .missingSourceFile(url):
+            "Source file no longer found: \(url.lastPathComponent). "
                 + "Move it back to \(url.deletingLastPathComponent().path) or remove this queue item."
-        case .sourceChanged(let url):
-            return "Source file changed since it was queued: \(url.lastPathComponent). Remove and re-add this item to refresh it."
-        case .outputUnavailable(let path, let why):
-            return "Output folder is no longer available (\(path)): \(why). Choose a new output folder and retry."
+        case let .sourceChanged(url):
+            "Source file changed since it was queued: \(url.lastPathComponent). Remove and re-add this item to refresh it."
+        case let .outputUnavailable(path, why):
+            "Output folder is no longer available (\(path)): \(why). Choose a new output folder and retry."
         case .noOutputDir:
-            return "No output folder selected."
+            "No output folder selected."
         }
     }
 }

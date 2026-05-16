@@ -4,7 +4,7 @@ import Foundation
 /// Uses event-driven I/O (`readabilityHandler` + `terminationHandler`) so
 /// neither stderr nor process-wait blocks a cooperative-pool thread for the
 /// duration of the encode.
-struct FFmpegRunner {
+enum FFmpegRunner {
     enum RunError: Error, LocalizedError {
         case notFound
         case nonZeroExit(Int32, String)
@@ -12,10 +12,10 @@ struct FFmpegRunner {
 
         var errorDescription: String? {
             switch self {
-            case .notFound: return "ffmpeg binary not found"
-            case .nonZeroExit(let code, let tail):
-                return "ffmpeg exited with code \(code)\n\n…\(tail)"
-            case .cancelled: return "Cancelled"
+            case .notFound: "ffmpeg binary not found"
+            case let .nonZeroExit(code, tail):
+                "ffmpeg exited with code \(code)\n\n…\(tail)"
+            case .cancelled: "Cancelled"
             }
         }
     }
@@ -75,7 +75,8 @@ struct FFmpegRunner {
         let remaining = stderr.fileHandleForReading.readDataToEndOfFile()
         if !remaining.isEmpty {
             for line in String(decoding: remaining, as: UTF8.self)
-                .split(separator: "\n", omittingEmptySubsequences: false) {
+                .split(separator: "\n", omittingEmptySubsequences: false)
+            {
                 tail.append(String(line))
             }
         }
@@ -147,8 +148,8 @@ private final class LineBuffer: @unchecked Sendable {
         data.append(chunk)
         var lines: [String] = []
         while let nl = data.firstIndex(of: 0x0A) {
-            let lineData = data.subdata(in: 0..<nl)
-            data.removeSubrange(0...nl)
+            let lineData = data.subdata(in: 0 ..< nl)
+            data.removeSubrange(0 ... nl)
             lines.append(String(decoding: lineData, as: UTF8.self))
         }
         return lines
@@ -163,7 +164,9 @@ final class LineTail: @unchecked Sendable {
     private var lines: [String] = []
     private let capacity: Int
 
-    init(capacity: Int) { self.capacity = capacity }
+    init(capacity: Int) {
+        self.capacity = capacity
+    }
 
     func append(_ s: String) {
         lock.lock(); defer { lock.unlock() }

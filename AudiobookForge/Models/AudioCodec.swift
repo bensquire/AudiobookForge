@@ -1,5 +1,5 @@
-import Foundation
 import CoreMedia
+import Foundation
 
 /// Audio codec identified at probe time. CoreMedia gives us a FourCC like
 /// `'aac '` (with trailing space) — comparing against the raw string is
@@ -17,23 +17,23 @@ enum AudioCodec: Hashable {
 
     init(fourCC: FourCharCode) {
         let bytes: [UInt8] = [
-            UInt8((fourCC >> 24) & 0xff),
-            UInt8((fourCC >> 16) & 0xff),
-            UInt8((fourCC >>  8) & 0xff),
-            UInt8( fourCC        & 0xff),
+            UInt8((fourCC >> 24) & 0xFF),
+            UInt8((fourCC >> 16) & 0xFF),
+            UInt8((fourCC >> 8) & 0xFF),
+            UInt8(fourCC & 0xFF)
         ]
         let raw = String(bytes: bytes, encoding: .ascii)?
             .trimmingCharacters(in: .whitespaces)
             .lowercased() ?? ""
         switch raw {
-        case "aac":           self = .aac
-        case "alac":          self = .alac
-        case "mp3", ".mp3":   self = .mp3
-        case "opus":          self = .opus
-        case "flac":          self = .flac
-        case "vorbis":        self = .vorbis
-        case "lpcm":          self = .pcm
-        default:              self = .unknown(raw)
+        case "aac": self = .aac
+        case "alac": self = .alac
+        case "mp3", ".mp3": self = .mp3
+        case "opus": self = .opus
+        case "flac": self = .flac
+        case "vorbis": self = .vorbis
+        case "lpcm": self = .pcm
+        default: self = .unknown(raw)
         }
     }
 

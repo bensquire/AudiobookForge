@@ -8,7 +8,7 @@ extension TimeInterval {
         let m = (total % 3600) / 60
         let s = total % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s)
-                     : String(format: "%d:%02d", m, s)
+            : String(format: "%d:%02d", m, s)
     }
 
     /// "1h 23m" or "23m" — for totals.

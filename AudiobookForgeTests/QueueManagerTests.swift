@@ -3,15 +3,16 @@ import XCTest
 
 @MainActor
 final class QueueManagerTests: XCTestCase {
-
     private var tmp: URL!
 
     override func setUp() {
         super.setUp()
+        // swiftlint:disable:next force_try
         tmp = try! FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-            create: true)
+            create: true
+        )
     }
 
     override func tearDown() {
@@ -94,12 +95,12 @@ final class QueueManagerTests: XCTestCase {
 
     // MARK: - cancel / remove
 
-    func test_cancel_marksPendingItemCancelled() {
+    func test_cancel_marksPendingItemCancelled() throws {
         // Arrange — enqueue two so the first stays pending (worker may
         // grab one but the second is definitely still pending)
         let queue = QueueManager()
         _ = queue.enqueue(from: makeDraft(outputDir: tmp, title: "A"))
-        let second = queue.enqueue(from: makeDraft(outputDir: tmp, title: "B"))!
+        let second = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")))
 
         // Act — cancel before the worker can pick it up
         queue.cancel(second)
@@ -108,11 +109,11 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertEqual(second.status, .cancelled)
     }
 
-    func test_remove_dropsFinishedItem() {
+    func test_remove_dropsFinishedItem() throws {
         // Arrange — enqueue then force a "succeeded" terminal state so
         // remove() takes the immediate-delete path.
         let queue = QueueManager()
-        let item = queue.enqueue(from: makeDraft(outputDir: tmp))!
+        let item = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
         item.status = .succeeded
 
         // Act
@@ -122,11 +123,11 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertTrue(queue.items.isEmpty)
     }
 
-    func test_clearFinished_keepsActiveItems() {
+    func test_clearFinished_keepsActiveItems() throws {
         // Arrange
         let queue = QueueManager()
-        let a = queue.enqueue(from: makeDraft(outputDir: tmp, title: "A"))!
-        let b = queue.enqueue(from: makeDraft(outputDir: tmp, title: "B"))!
+        let a = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "A")))
+        let b = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")))
         a.status = .succeeded
         b.status = .pending
 
@@ -179,8 +180,9 @@ final class QueueManagerTests: XCTestCase {
                 title: "t",
                 duration: 60,
                 codec: .aac,
-                sampleRate: 44_100,
-                channels: 2)
+                sampleRate: 44100,
+                channels: 2
+            )
         ]
         p.metadata.title = title
         p.metadata.author = author

@@ -50,6 +50,20 @@ chapter-file building, encode-job helpers, formatting, model invariants,
 queue manager. SwiftUI views and subprocess-driven services (ffmpeg,
 ffprobe, metadata APIs) aren't unit-tested; those want integration tests.
 
+## Lint & format
+
+```bash
+./scripts/format.sh    # auto-fix what SwiftFormat / SwiftLint can
+./scripts/lint.sh      # check-only; CI runs exactly this and fails on diff
+```
+
+Config lives in `.swiftformat` and `.swiftlint.yml`. SwiftFormat handles
+whitespace, line wrapping, redundant `self`, trailing-comma policy, etc.
+SwiftLint enforces a curated subset (we disable the rules that fight
+idiomatic patterns — short loop vars, deliberate trailing commas, modern
+one-liner braces — and opt into the high-signal ones like
+`first_where`, `redundant_nil_coalescing`, `prefer_self_in_static_references`).
+
 ## Project layout
 
 ```

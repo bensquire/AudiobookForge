@@ -1,0 +1,36 @@
+# SwiftFormat config. Mostly defaults — explicit settings exist where we
+# differ from the tool's out-of-the-box opinions.
+#
+# Run:
+#   scripts/format.sh   # writes changes
+#   scripts/lint.sh     # checks only, exits non-zero on diff
+
+--swiftversion 5.10
+
+# Indentation / width
+--indent 4
+--maxwidth 110
+
+# We use trailing commas in collection literals deliberately.
+--commas inline
+--trailingcommas always
+
+# `self.foo` is noisy outside of init / capture lists — strip it.
+--self remove
+
+# @testable imports go at the bottom in test files.
+--importgrouping testable-bottom
+
+# Keep existing wrapping choices in argument lists rather than rewriting
+# them — they're often deliberate readability calls.
+--wrapparameters preserve
+--wraparguments preserve
+
+# Strip lone-newline-at-end and trailing whitespace.
+--trimwhitespace always
+
+# Don't insert FileHeader comments — we keep WHY-comments local.
+--header strip
+
+# Exclude generated / vendored paths.
+--exclude build,.build,AudiobookForge.xcodeproj,AudiobookForge/Resources/bin

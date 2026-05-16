@@ -16,8 +16,8 @@ final class AudiobookProject {
 
     var canEnqueue: Bool {
         !chapters.isEmpty
-        && metadata.hasRequiredFields
-        && settings.outputDirectory != nil
+            && metadata.hasRequiredFields
+            && settings.outputDirectory != nil
     }
 
     /// Clear chapters + metadata so the prep area is ready for the next

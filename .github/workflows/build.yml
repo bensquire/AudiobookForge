@@ -22,8 +22,11 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install build tools
+        run: brew install xcodegen swiftformat swiftlint
+
+      - name: Lint
+        run: ./scripts/lint.sh
 
       - name: Cache ffmpeg
         id: cache-ffmpeg

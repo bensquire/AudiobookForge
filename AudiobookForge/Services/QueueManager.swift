@@ -12,7 +12,9 @@ final class QueueManager {
     private var pumpWakeup: CheckedContinuation<Void, Never>?
     private var pumpTask: Task<Void, Never>?
 
-    var isProcessing: Bool { running != nil }
+    var isProcessing: Bool {
+        running != nil
+    }
 
     init() {
         pumpTask = Task { @MainActor [weak self] in
@@ -30,7 +32,8 @@ final class QueueManager {
         let desired = EncodeJob.resolveOutputURL(
             in: outDir,
             metadata: draft.metadata,
-            template: draft.settings.filenameTemplate)
+            template: draft.settings.filenameTemplate
+        )
         let claimed = inFlightOutputURLs()
         return OutputPathResolver.uniqueURL(for: desired) { claimed.contains($0) }
     }
@@ -174,7 +177,8 @@ final class QueueManager {
             }
             if let expected = item.sourceFingerprints[url],
                let actual = SourceFingerprint.capture(url),
-               actual != expected {
+               actual != expected
+            {
                 return EncodeError.sourceChanged(url)
             }
         }

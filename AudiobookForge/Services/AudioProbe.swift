@@ -1,6 +1,6 @@
-import Foundation
 import AVFoundation
 import CoreMedia
+import Foundation
 
 /// Probe an audio file for duration, tags, codec, and bitrate.
 ///
@@ -20,7 +20,7 @@ enum AudioProbe {
         var album: String?
         var trackNumber: Int?
         var duration: TimeInterval
-        var bitrate: Int = 0     // bits/sec
+        var bitrate: Int = 0 // bits/sec
         var codec: AudioCodec = .unknown("")
         var sampleRate: Double = 0
         var channels: Int = 0
@@ -43,20 +43,23 @@ enum AudioProbe {
         }
 
         if let tracks = try? await asset.loadTracks(withMediaType: .audio),
-           let audio = tracks.first {
+           let audio = tracks.first
+        {
             // Prefer ffprobe — see file header for why. Fall back to
             // AVFoundation's estimate when ffprobe can't determine it
             // (e.g. bundled binary missing in a dev build).
             if let ff = await ffprobeBR {
                 probed.bitrate = ff
             } else if let rate = try? await audio.load(.estimatedDataRate),
-                      rate.isFinite, rate > 0 {
+                      rate.isFinite, rate > 0
+            {
                 probed.bitrate = Int(rate)
             }
             // Codec / sample rate / channels — needed to decide whether we
             // can remux losslessly instead of re-encoding.
             if let descs = try? await audio.load(.formatDescriptions),
-               let desc = descs.first {
+               let desc = descs.first
+            {
                 probed.codec = AudioCodec(fourCC: CMFormatDescriptionGetMediaSubType(desc))
                 if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
                     probed.sampleRate = asbd.pointee.mSampleRate
@@ -65,7 +68,7 @@ enum AudioProbe {
             }
         }
 
-        for item in (await meta) ?? [] {
+        for item in await (meta) ?? [] {
             guard let key = item.commonKey?.rawValue else { continue }
             switch key {
             case AVMetadataKey.commonKeyTitle.rawValue:
@@ -79,7 +82,7 @@ enum AudioProbe {
             }
         }
 
-        for item in (await id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
+        for item in await (id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
             if let s = try? await item.load(.stringValue) {
                 probed.trackNumber = Int(s.split(separator: "/").first.map(String.init) ?? s)
             }
@@ -101,7 +104,7 @@ enum AudioProbe {
             "-select_streams", "a:0",
             "-show_entries", "stream=bit_rate",
             "-of", "default=noprint_wrappers=1:nokey=1",
-            url.path,
+            url.path
         ]
 
         let pipe = Pipe()

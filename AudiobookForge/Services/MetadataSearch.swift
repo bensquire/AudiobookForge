@@ -4,18 +4,20 @@ import Foundation
 /// mirror used by Audiobookshelf/Plex). iTunes Search API is the fallback
 /// for non-Audible titles.
 enum MetadataSearch {
-
     enum Provider: String, CaseIterable, Identifiable {
         case audnexus
         case itunes
         case all
 
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
+
         var label: String {
             switch self {
-            case .audnexus: return "Audnexus"
-            case .itunes:   return "iTunes"
-            case .all:      return "All providers"
+            case .audnexus: "Audnexus"
+            case .itunes: "iTunes"
+            case .all: "All providers"
             }
         }
     }
@@ -24,7 +26,7 @@ enum MetadataSearch {
         case badResponse
         var errorDescription: String? {
             switch self {
-            case .badResponse: return "Unexpected response from metadata server"
+            case .badResponse: "Unexpected response from metadata server"
             }
         }
     }
@@ -33,16 +35,16 @@ enum MetadataSearch {
         let results: [MetadataSearchResult]
         switch provider {
         case .audnexus:
-            results = (try? await audnexusSearch(query: query)) ?? []
+            results = await (try? audnexusSearch(query: query)) ?? []
         case .itunes:
-            results = (try? await itunesSearch(query: query)) ?? []
+            results = await (try? itunesSearch(query: query)) ?? []
         case .all:
             // Audnexus first in the merged list because it's the higher-
             // quality source for audiobooks specifically; Set.insert
             // preserves that priority when iTunes returns the same title.
-            async let audnex = (try? await audnexusSearch(query: query)) ?? []
-            async let itunes = (try? await itunesSearch(query: query)) ?? []
-            results = await audnex + (await itunes)
+            async let audnex = await (try? audnexusSearch(query: query)) ?? []
+            async let itunes = await (try? itunesSearch(query: query)) ?? []
+            results = await audnex + itunes
         }
         var seen = Set<String>()
         return results.filter { seen.insert(($0.title + "|" + $0.author).lowercased()).inserted }
@@ -78,7 +80,7 @@ enum MetadataSearch {
         comps.queryItems = [
             URLQueryItem(name: "term", value: query),
             URLQueryItem(name: "media", value: "audiobook"),
-            URLQueryItem(name: "limit", value: "10"),
+            URLQueryItem(name: "limit", value: "10")
         ]
         let (data, _) = try await URLSession.shared.data(from: comps.url!)
         let envelope = try JSONDecoder().decode(ITunesEnvelope.self, from: data)

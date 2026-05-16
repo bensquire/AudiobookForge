@@ -1,0 +1,70 @@
+# SwiftLint config tuned for this codebase. Default rule set is opinionated
+# in ways that don't match our house style — we explicitly disable rules
+# that would flag idiomatic-for-this-codebase patterns, and enable the
+# useful opt-ins that actually catch real bugs.
+
+disabled_rules:
+  # Short loop / closure vars (`i`, `s`, `c`) are idiomatic in tight scopes
+  # and we use them throughout.
+  - identifier_name
+  # Trailing commas in collection literals are deliberate — they reduce
+  # diff churn on additions and match modern Swift convention.
+  - trailing_comma
+  # One-liner `{ if case .x = self { true } else { false } }` is the right
+  # form for our QueueItem.Status helpers; this rule mistakes it for a
+  # brace-placement issue.
+  - opening_brace
+  # Explicit `var x: String? = nil` reads clearer than implicit in our
+  # struct properties.
+  - implicit_optional_initialization
+  # withTaskGroup tuples carrying (index, url, probed) are fine.
+  - large_tuple
+  # `String(decoding: data, as: UTF8.self)` is correct for the ASCII output
+  # of `which`-style helpers; failable init isn't needed.
+  - optional_data_string_conversion
+  # Run-script and bundled binaries occasionally trip the body-length rule
+  # for legitimately long-but-flat code (e.g. EncodeJob.runInner).
+  - function_body_length
+  # SwiftFormat handles closing-brace placement.
+  - closing_brace
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - last_where
+  - sorted_first_last
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+  - prefer_self_in_static_references
+  - toggle_bool
+
+# Analyzer rules only fire under `swiftlint analyze` — listing here keeps
+# `swiftlint` happy and `analyze` aware of them.
+analyzer_rules:
+  - unused_import
+  - unused_declaration
+
+line_length:
+  warning: 130
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 500
+  error: 1000
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+type_body_length:
+  warning: 400
+  error: 600
+
+excluded:
+  - build
+  - .build
+  - AudiobookForge.xcodeproj
+  - AudiobookForge/Resources/bin

@@ -3,14 +3,13 @@ import Foundation
 /// Build an FFMETADATA1 file describing the book + chapter offsets.
 /// ffmpeg consumes this via `-i metadata.txt -map_metadata 1`.
 enum ChapterBuilder {
-
     static func ffmetadata(for chapters: [Chapter], metadata: BookMetadata) -> String {
         var out = ";FFMETADATA1\n"
         out += kv("title", metadata.title)
         out += kv("artist", metadata.author)
         out += kv("album", metadata.title)
         out += kv("album_artist", metadata.author)
-        out += kv("composer", metadata.narrator)        // narrator → composer is the de-facto convention
+        out += kv("composer", metadata.narrator) // narrator → composer is the de-facto convention
         out += kv("date", metadata.year)
         out += kv("genre", metadata.genre.isEmpty ? "Audiobook" : metadata.genre)
         out += kv("description", metadata.description)

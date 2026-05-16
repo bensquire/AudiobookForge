@@ -9,11 +9,11 @@ import Foundation
 ///   2. At encode-start time as a defensive re-check in case another
 ///      finished item dropped a file at the same path in the meantime.
 enum OutputPathResolver {
-
     static func uniqueURL(for desired: URL,
                           fileManager: FileManager = .default,
                           maxAttempts: Int = 999,
-                          isTaken: (URL) -> Bool = { _ in false }) -> URL {
+                          isTaken: (URL) -> Bool = { _ in false }) -> URL
+    {
         func taken(_ url: URL) -> Bool {
             fileManager.fileExists(atPath: url.path) || isTaken(url)
         }
@@ -22,7 +22,7 @@ enum OutputPathResolver {
         let dir = desired.deletingLastPathComponent()
         let ext = desired.pathExtension
         let stem = desired.deletingPathExtension().lastPathComponent
-        for n in 2...maxAttempts {
+        for n in 2 ... maxAttempts {
             let name = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
             let candidate = dir.appendingPathComponent(name)
             if !taken(candidate) { return candidate }

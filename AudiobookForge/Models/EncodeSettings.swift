@@ -7,8 +7,11 @@ struct EncodeSettings: Equatable {
         case k96 = "96k"
         case k128 = "128k"
         case k192 = "192k"
-        case source = "source"
-        var id: String { rawValue }
+        case source
+        var id: String {
+            rawValue
+        }
+
         var label: String {
             self == .source ? "Match source" : rawValue
         }
@@ -16,11 +19,13 @@ struct EncodeSettings: Equatable {
 
     enum Codec: String, CaseIterable, Identifiable {
         case aac
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
     }
 
     var bitrate: Bitrate = .source
     var codec: Codec = .aac
-    var outputDirectory: URL? = nil
+    var outputDirectory: URL?
     var filenameTemplate: String = "{author}/{title}/{title}.m4b"
 }

@@ -87,8 +87,11 @@ struct MetadataPanelView: View {
                 .labelsHidden()
                 .frame(width: 130)
                 Button(action: runSearch) {
-                    if isSearching { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "magnifyingglass") }
+                    if isSearching {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "magnifyingglass")
+                    }
                 }
                 .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || isSearching)
             }
@@ -133,7 +136,7 @@ struct MetadataPanelView: View {
             // Most providers already return the cover URL from search, so
             // start the cover download in parallel with the enrich call
             // rather than waiting on enrich first.
-            async let enrichedTask = (try? await MetadataSearch.enrich(result)) ?? result
+            async let enrichedTask = await (try? MetadataSearch.enrich(result)) ?? result
             async let initialCover: Data? = {
                 guard let url = result.coverURL else { return nil }
                 return try? await MetadataSearch.fetchCover(url)
@@ -209,4 +212,3 @@ private struct SearchResultRow: View {
         .buttonStyle(.plain)
     }
 }
-

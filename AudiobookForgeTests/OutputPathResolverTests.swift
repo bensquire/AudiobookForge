@@ -2,17 +2,18 @@ import XCTest
 @testable import AudiobookForge
 
 final class OutputPathResolverTests: XCTestCase {
-
     private var tmp: URL!
 
     override func setUp() {
         super.setUp()
         // Arrange (shared) — a fresh empty directory for every test so
         // collision behaviour is deterministic.
+        // swiftlint:disable:next force_try
         tmp = try! FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-            create: true)
+            create: true
+        )
     }
 
     override func tearDown() {
@@ -51,7 +52,8 @@ final class OutputPathResolverTests: XCTestCase {
 
         // Act
         let result = OutputPathResolver.uniqueURL(
-            for: tmp.appendingPathComponent("book.m4b"))
+            for: tmp.appendingPathComponent("book.m4b")
+        )
 
         // Assert
         XCTAssertEqual(result.lastPathComponent, "book (4).m4b")
@@ -87,14 +89,15 @@ final class OutputPathResolverTests: XCTestCase {
         // Arrange — exhaust the numeric range so the resolver has to fall
         // through to the UUID degenerate branch
         try Data().write(to: tmp.appendingPathComponent("x.m4b"))
-        for n in 2...5 {
+        for n in 2 ... 5 {
             try Data().write(to: tmp.appendingPathComponent("x (\(n)).m4b"))
         }
 
         // Act — clamp maxAttempts to force the UUID fallback
         let result = OutputPathResolver.uniqueURL(
             for: tmp.appendingPathComponent("x.m4b"),
-            maxAttempts: 5)
+            maxAttempts: 5
+        )
 
         // Assert — UUID branch matches `x (XXXXXXXX).m4b`
         let stem = result.deletingPathExtension().lastPathComponent

@@ -2,7 +2,6 @@ import XCTest
 @testable import AudiobookForge
 
 final class TimeIntervalFormatTests: XCTestCase {
-
     func test_positional_underAnHour_omitsHourComponent() {
         // Arrange
         let t: TimeInterval = 5 * 60 + 7 // 5:07

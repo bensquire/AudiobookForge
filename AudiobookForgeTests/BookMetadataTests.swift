@@ -2,7 +2,6 @@ import XCTest
 @testable import AudiobookForge
 
 final class BookMetadataTests: XCTestCase {
-
     func test_isEmpty_trueOnDefaultInit() {
         // Arrange
         let meta = BookMetadata()

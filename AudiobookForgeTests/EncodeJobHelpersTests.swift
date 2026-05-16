@@ -2,7 +2,6 @@ import XCTest
 @testable import AudiobookForge
 
 final class EncodeJobHelpersTests: XCTestCase {
-
     // MARK: - canRemux
 
     func test_canRemux_falseWhenBitrateIsNotSource() {
@@ -37,7 +36,8 @@ final class EncodeJobHelpersTests: XCTestCase {
 
         // Act
         let canRemux = EncodeJob.canRemux(
-            chapters: chapters, settings: EncodeSettings())
+            chapters: chapters, settings: EncodeSettings()
+        )
 
         // Assert — MP3 in MP4 is legal but stumbles in some readers, so we
         // route mixed/MP3 inputs through the re-encode path.
@@ -46,12 +46,13 @@ final class EncodeJobHelpersTests: XCTestCase {
 
     func test_canRemux_falseWhenSampleRatesDiffer() {
         // Arrange — both AAC, different sample rates
-        var first = aacChapter(); first.sampleRate = 44_100
-        var second = aacChapter(); second.sampleRate = 48_000
+        var first = aacChapter(); first.sampleRate = 44100
+        var second = aacChapter(); second.sampleRate = 48000
 
         // Act
         let canRemux = EncodeJob.canRemux(
-            chapters: [first, second], settings: EncodeSettings())
+            chapters: [first, second], settings: EncodeSettings()
+        )
 
         // Assert
         XCTAssertFalse(canRemux)
@@ -64,7 +65,8 @@ final class EncodeJobHelpersTests: XCTestCase {
 
         // Act
         let canRemux = EncodeJob.canRemux(
-            chapters: [first, second], settings: EncodeSettings())
+            chapters: [first, second], settings: EncodeSettings()
+        )
 
         // Assert
         XCTAssertFalse(canRemux)
@@ -84,7 +86,8 @@ final class EncodeJobHelpersTests: XCTestCase {
 
         // Act
         let resolved = EncodeJob.resolveBitrate(
-            chapters: [aacChapter()], settings: settings)
+            chapters: [aacChapter()], settings: settings
+        )
 
         // Assert
         XCTAssertEqual(resolved, "192k")
@@ -93,12 +96,13 @@ final class EncodeJobHelpersTests: XCTestCase {
     func test_resolveBitrate_sourceMode_snapsToNearestStandardStep() {
         // Arrange — 70 kbps weighted average; nearest standard step is 64k.
         var ch = aacChapter()
-        ch.sourceBitrate = 70_000
+        ch.sourceBitrate = 70000
         ch.duration = 60
 
         // Act
         let resolved = EncodeJob.resolveBitrate(
-            chapters: [ch], settings: EncodeSettings()) // source default
+            chapters: [ch], settings: EncodeSettings()
+        ) // source default
 
         // Assert
         XCTAssertEqual(resolved, "64k")
@@ -108,11 +112,12 @@ final class EncodeJobHelpersTests: XCTestCase {
         // Arrange — short 192 kbps prelude + long 64 kbps body. Weighted
         // average heavily favours the longer file → snap to 64k.
         var short = aacChapter(); short.sourceBitrate = 192_000; short.duration = 1
-        var long = aacChapter(); long.sourceBitrate = 64_000;  long.duration = 100
+        var long = aacChapter(); long.sourceBitrate = 64000; long.duration = 100
 
         // Act
         let resolved = EncodeJob.resolveBitrate(
-            chapters: [short, long], settings: EncodeSettings())
+            chapters: [short, long], settings: EncodeSettings()
+        )
 
         // Assert
         XCTAssertEqual(resolved, "64k")
@@ -126,7 +131,8 @@ final class EncodeJobHelpersTests: XCTestCase {
 
         // Act
         let resolved = EncodeJob.resolveBitrate(
-            chapters: [ch], settings: EncodeSettings())
+            chapters: [ch], settings: EncodeSettings()
+        )
 
         // Assert — sane default rather than 0k or a divide-by-zero
         XCTAssertEqual(resolved, "64k")
@@ -144,7 +150,8 @@ final class EncodeJobHelpersTests: XCTestCase {
         let result = EncodeJob.resolveOutputURL(
             in: base,
             metadata: meta,
-            template: "{author}/{year}/{title}.m4b")
+            template: "{author}/{year}/{title}.m4b"
+        )
 
         // Assert
         XCTAssertEqual(result.path, "/Volumes/Audiobooks/Frank Herbert/1965/Dune.m4b")
@@ -160,7 +167,8 @@ final class EncodeJobHelpersTests: XCTestCase {
         let result = EncodeJob.resolveOutputURL(
             in: URL(fileURLWithPath: "/out"),
             metadata: meta,
-            template: "{title}.m4b")
+            template: "{title}.m4b"
+        )
 
         // Assert — illegal characters replaced with `_`
         XCTAssertEqual(result.lastPathComponent, "A_B_ C_.m4b")
@@ -173,10 +181,11 @@ final class EncodeJobHelpersTests: XCTestCase {
             sourceURL: URL(fileURLWithPath: "/tmp/x.m4a"),
             title: "x",
             duration: 60,
-            sourceBitrate: 64_000,
+            sourceBitrate: 64000,
             codec: .aac,
-            sampleRate: 44_100,
-            channels: 2)
+            sampleRate: 44100,
+            channels: 2
+        )
     }
 
     private func mp3Chapter() -> Chapter {
@@ -184,9 +193,10 @@ final class EncodeJobHelpersTests: XCTestCase {
             sourceURL: URL(fileURLWithPath: "/tmp/x.mp3"),
             title: "x",
             duration: 60,
-            sourceBitrate: 64_000,
+            sourceBitrate: 64000,
             codec: .mp3,
-            sampleRate: 44_100,
-            channels: 2)
+            sampleRate: 44100,
+            channels: 2
+        )
     }
 }

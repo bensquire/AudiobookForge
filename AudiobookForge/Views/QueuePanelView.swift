@@ -22,8 +22,8 @@ struct QueuePanelView: View {
     }
 
     private var header: some View {
-        let pending = queue.items.filter { $0.status.isActive }.count
-        let done = queue.items.filter { $0.status.isSucceeded }.count
+        let pending = queue.items.filter(\.status.isActive).count
+        let done = queue.items.filter(\.status.isSucceeded).count
         return HStack(spacing: 8) {
             Text("Queue").font(.headline)
             if !queue.items.isEmpty {
@@ -32,7 +32,7 @@ struct QueuePanelView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if queue.items.contains(where: { $0.status.isFinished }) {
+            if queue.items.contains(where: \.status.isFinished) {
                 Button("Clear Done") { queue.clearFinished() }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
@@ -105,7 +105,7 @@ private struct QueueRow: View {
                             Text(label).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
-                } else if case .failed(let msg) = item.status {
+                } else if case let .failed(msg) = item.status {
                     Text(msg)
                         .font(.caption2)
                         .foregroundStyle(.red)
@@ -134,7 +134,6 @@ private struct QueueRow: View {
         .animation(.easeOut(duration: 0.12), value: hovering)
     }
 
-    @ViewBuilder
     private var actionRow: some View {
         HStack(spacing: 4) {
             Spacer()
@@ -155,7 +154,8 @@ private struct QueueRow: View {
     }
 
     private func rowButton(_ label: String, systemImage: String,
-                           action: @escaping () -> Void) -> some View {
+                           action: @escaping () -> Void) -> some View
+    {
         Button(action: action) {
             Label(label, systemImage: systemImage)
                 .labelStyle(.titleAndIcon)

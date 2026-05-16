@@ -3,7 +3,6 @@ import XCTest
 
 @MainActor
 final class AudiobookProjectTests: XCTestCase {
-
     func test_canEnqueue_falseOnEmptyDraft() {
         // Arrange
         let project = AudiobookProject()
@@ -85,7 +84,7 @@ final class AudiobookProjectTests: XCTestCase {
         project.chapters = [
             makeChapter(duration: 60),
             makeChapter(duration: 90),
-            makeChapter(duration: 150),
+            makeChapter(duration: 150)
         ]
 
         // Act
@@ -101,7 +100,8 @@ final class AudiobookProjectTests: XCTestCase {
             title: "x",
             duration: duration,
             codec: .aac,
-            sampleRate: 44_100,
-            channels: 2)
+            sampleRate: 44100,
+            channels: 2
+        )
     }
 }

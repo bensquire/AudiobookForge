@@ -10,8 +10,8 @@ struct BookMetadata: Equatable {
     var year: String = ""
     var description: String = ""
     var genre: String = ""
-    var coverData: Data? = nil
-    var coverSourceURL: URL? = nil
+    var coverData: Data?
+    var coverSourceURL: URL?
 
     var isEmpty: Bool {
         title.isEmpty && author.isEmpty && narrator.isEmpty
@@ -21,7 +21,7 @@ struct BookMetadata: Equatable {
     /// values don't count.
     var hasRequiredFields: Bool {
         !title.trimmingCharacters(in: .whitespaces).isEmpty
-        && !author.trimmingCharacters(in: .whitespaces).isEmpty
+            && !author.trimmingCharacters(in: .whitespaces).isEmpty
     }
 }
 
@@ -31,14 +31,14 @@ enum MetadataSource: String, Hashable {
 
     var label: String {
         switch self {
-        case .audnexus: return "Audnexus"
-        case .itunes:   return "iTunes"
+        case .audnexus: "Audnexus"
+        case .itunes: "iTunes"
         }
     }
 }
 
 struct MetadataSearchResult: Identifiable, Hashable {
-    let id: String                 // ASIN or other provider key
+    let id: String // ASIN or other provider key
     let source: MetadataSource
     let title: String
     let author: String

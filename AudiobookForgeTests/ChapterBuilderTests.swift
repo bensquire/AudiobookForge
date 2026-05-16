@@ -2,14 +2,13 @@ import XCTest
 @testable import AudiobookForge
 
 final class ChapterBuilderTests: XCTestCase {
-
     // MARK: - concat list
 
     func test_concatList_emitsOneLinePerChapter() {
         // Arrange
         let chapters = [
             Chapter(sourceURL: URL(fileURLWithPath: "/tmp/a.mp3"), title: "A", duration: 1),
-            Chapter(sourceURL: URL(fileURLWithPath: "/tmp/b.mp3"), title: "B", duration: 1),
+            Chapter(sourceURL: URL(fileURLWithPath: "/tmp/b.mp3"), title: "B", duration: 1)
         ]
 
         // Act
@@ -72,7 +71,7 @@ final class ChapterBuilderTests: XCTestCase {
         // Arrange — two 1500 ms chapters
         let chapters = [
             Chapter(sourceURL: URL(fileURLWithPath: "/tmp/a.mp3"), title: "One", duration: 1.5),
-            Chapter(sourceURL: URL(fileURLWithPath: "/tmp/b.mp3"), title: "Two", duration: 1.5),
+            Chapter(sourceURL: URL(fileURLWithPath: "/tmp/b.mp3"), title: "Two", duration: 1.5)
         ]
 
         // Act
