@@ -25,8 +25,12 @@ targets:
       - path: AudiobookForge
         excludes:
           - "Resources/bin/**"
-    resources:
+      # type: folder makes Xcode treat this as a folder reference — its
+      # contents are resolved at build time, not xcodegen time. That lets
+      # us run `xcodegen generate` before `scripts/fetch-ffmpeg.sh` and
+      # still get a populated bin/ inside the app at build time.
       - path: AudiobookForge/Resources/bin
+        type: folder
         optional: true
         buildPhase: resources
     info:
