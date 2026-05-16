@@ -6,12 +6,12 @@
 audiobook — with real metadata lookup, embedded cover art, and a background
 encode queue.**
 
-[![Build](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/build.yml?branch=main&label=build&logo=github)](https://github.com/bensquire/AudiobookForge/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/release.yml?label=release&logo=github)](https://github.com/bensquire/AudiobookForge/actions/workflows/release.yml)
-[![Latest](https://img.shields.io/github/v/release/bensquire/AudiobookForge?include_prereleases&label=latest&logo=apple)](https://github.com/bensquire/AudiobookForge/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/bensquire/AudiobookForge/total?label=downloads)](https://github.com/bensquire/AudiobookForge/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007aff?logo=apple)](https://www.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/swift-5.10-f05138?logo=swift)](https://swift.org)
+[![Build](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/build.yml?branch=main&label=build&logo=github&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/release.yml?label=release&logo=github&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/actions/workflows/release.yml)
+[![Latest](https://img.shields.io/github/v/release/bensquire/AudiobookForge?include_prereleases&label=latest&logo=apple&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/bensquire/AudiobookForge/total?label=downloads&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007aff?logo=apple&v=2)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/swift-5.10-f05138?logo=swift&v=2)](https://swift.org)
 
 [**Download latest →**](https://github.com/bensquire/AudiobookForge/releases/latest) ·
 [Releases](https://github.com/bensquire/AudiobookForge/releases) ·
@@ -100,12 +100,10 @@ brew install xcodegen create-dmg
 scripts/release.sh 0.1.0
 ```
 
-## Roadmap
+## Improvement Ideas
 
 - [ ] Batch queue: process multiple book folders sequentially
 - [ ] Persistable projects (`.audiobookforge` document type)
-- [ ] AVFoundation encoder backend (MAS-clean alternative to ffmpeg)
-- [ ] Better source-bitrate detection (ffprobe pass)
 - [ ] Reorderable chapter list with merge/split
 - [ ] Drag chapter boundaries when source files don't map 1:1 to chapters
 - [ ] Preset library (per-bitrate-and-codec presets)
