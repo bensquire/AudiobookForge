@@ -1,18 +1,27 @@
+<div align="center">
+
 # AudiobookForge
 
-A modern macOS app that combines MP3 files into a single chaptered `.m4b`
-audiobook, fetching metadata (title, author, narrator, series, cover art)
-from Audnexus and the iTunes Search API.
+**A modern macOS app that combines MP3 files into a single chaptered `.m4b`
+audiobook — with real metadata lookup, embedded cover art, and a background
+encode queue.**
+
+[![Build](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/build.yml?branch=main&label=build&logo=github)](https://github.com/bensquire/AudiobookForge/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/bensquire/AudiobookForge/release.yml?label=release&logo=github)](https://github.com/bensquire/AudiobookForge/actions/workflows/release.yml)
+[![Latest](https://img.shields.io/github/v/release/bensquire/AudiobookForge?include_prereleases&label=latest&logo=apple)](https://github.com/bensquire/AudiobookForge/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/bensquire/AudiobookForge/total?label=downloads)](https://github.com/bensquire/AudiobookForge/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007aff?logo=apple)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/swift-5.10-f05138?logo=swift)](https://swift.org)
+
+[**Download latest →**](https://github.com/bensquire/AudiobookForge/releases/latest) ·
+[Releases](https://github.com/bensquire/AudiobookForge/releases) ·
+[Releasing docs](RELEASING.md)
+
+</div>
 
 Think Audiobook Builder, but with one-shot drag-folder UX, real metadata
-lookup, and a native SwiftUI interface.
+lookup from Audnexus / iTunes, and a native SwiftUI interface.
 
-## Status
-
-Early — usable MVP scaffold. The encode pipeline works (ffmpeg concat + chapter
-markers + cover art mux); the UI lets you drag files in, edit chapters, search
-metadata, and encode. Polish, batch queue, presets, and App Store submission
-work are still TODO.
 
 ## Quick start
 
@@ -90,31 +99,6 @@ Dry-run locally without burning a tag:
 brew install xcodegen create-dmg
 scripts/release.sh 0.1.0
 ```
-
-## App Store distribution notes
-
-This scaffold is set up for an MAS-friendly future, but a few real-world
-gotchas remain:
-
-1. **ffmpeg licensing.** Static ffmpeg builds from `evermeet.cx` and
-   `osxexperts.net` include GPL components (x264, x265, lame). Apple's MAS
-   review is incompatible with GPLv3 distribution. Options before submission:
-   - Build a custom **LGPL-only ffmpeg** (no GPL libs, just native AAC + LAME
-     dropped) and ship that. Most realistic path.
-   - Or **replace the encoder with AVFoundation**: `AVMutableComposition` +
-     `AVAssetExportSession` can concat audio and write M4A/M4B with chapter
-     markers via `AVMetadataItem`. Less control over bitrate but zero
-     bundling/licensing pain. The `EncodeJob` boundary is designed so this
-     swap is contained.
-2. **Sandboxing** is already on in `AudiobookForge.entitlements`. The app uses
-   `user-selected.read-write` for input files and output folders. Bookmarks
-   are scoped so reopening a project later still works.
-3. **CI signing.** The GitHub Actions workflow currently builds unsigned for
-   smoke-testing. To wire up notarized / TestFlight builds, see the commented
-   TODO at the bottom of `.github/workflows/build.yml`.
-4. **Hardened runtime** is on. ffmpeg needs the `com.apple.security.cs.*`
-   exemptions if you keep using JIT-using builds; the static binaries here
-   don't, so the default entitlements are sufficient.
 
 ## Roadmap
 
