@@ -34,12 +34,29 @@ case "$ext" in
 esac
 
 echo "==> Submitting $UPLOAD to Apple notary"
-xcrun notarytool submit "$UPLOAD" \
-  --key      "$APPLE_API_KEY_PATH" \
-  --key-id   "$APPLE_API_KEY_ID" \
-  --issuer   "$APPLE_API_ISSUER_ID" \
-  --wait \
-  --timeout 30m
+# Tee so we can recover the submission ID for the log fetch below if the
+# verdict is Invalid.
+SUBMIT_LOG=$(mktemp)
+if ! xcrun notarytool submit "$UPLOAD" \
+       --key      "$APPLE_API_KEY_PATH" \
+       --key-id   "$APPLE_API_KEY_ID" \
+       --issuer   "$APPLE_API_ISSUER_ID" \
+       --wait \
+       --timeout 30m 2>&1 | tee "$SUBMIT_LOG"; then
+  SUBMISSION_ID=$(grep -m1 -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$SUBMIT_LOG" | head -1 || true)
+  if [[ -n "$SUBMISSION_ID" ]]; then
+    echo
+    echo "==> Notarization failed — fetching diagnostic log for $SUBMISSION_ID"
+    xcrun notarytool log "$SUBMISSION_ID" \
+      --key    "$APPLE_API_KEY_PATH" \
+      --key-id "$APPLE_API_KEY_ID" \
+      --issuer "$APPLE_API_ISSUER_ID" \
+      || true
+  fi
+  rm -f "$SUBMIT_LOG"
+  exit 1
+fi
+rm -f "$SUBMIT_LOG"
 
 # Staple the ticket. For .app, the original (not the zip) gets stapled —
 # the zip was just a transport.

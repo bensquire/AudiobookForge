@@ -33,6 +33,37 @@ targets:
         type: folder
         optional: true
         buildPhase: resources
+    postBuildScripts:
+      # Bundled Mach-O binaries (ffmpeg / ffprobe) aren't auto-signed by
+      # Xcode — only frameworks in known paths are. For notarization to
+      # succeed each one must carry a hardened-runtime signature with a
+      # secure timestamp. This script runs after Copy Resources and before
+      # Xcode's final outer-bundle signing pass, so the inner signatures
+      # get hashed into the outer signature.
+      - name: Sign embedded helpers (hardened runtime)
+        script: |
+          set -euo pipefail
+          BIN_DIR="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Contents/Resources/bin"
+          [ -d "$BIN_DIR" ] || { echo "no embedded bin/, nothing to sign"; exit 0; }
+
+          # Skip on ad-hoc / unsigned debug builds — hardened runtime + a
+          # secure timestamp both require a real Developer ID identity.
+          if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ] \
+             || [ -z "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] \
+             || [ "${EXPANDED_CODE_SIGN_IDENTITY}" = "-" ]; then
+            echo "skipping embedded-binary signing (ad-hoc / unsigned build)"
+            exit 0
+          fi
+
+          for bin in "$BIN_DIR"/*; do
+            [ -f "$bin" ] || continue
+            echo "==> signing $(basename "$bin") with hardened runtime"
+            /usr/bin/codesign --force \
+              --options runtime \
+              --timestamp \
+              --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
+              "$bin"
+          done
     info:
       path: AudiobookForge/Info.plist
       properties:
