@@ -41,10 +41,20 @@ targets:
       # Xcode's final outer-bundle signing pass, so the inner signatures
       # get hashed into the outer signature.
       - name: Sign embedded helpers (hardened runtime)
+        basedOnDependencyAnalysis: false
         script: |
           set -euo pipefail
-          BIN_DIR="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Contents/Resources/bin"
-          [ -d "$BIN_DIR" ] || { echo "no embedded bin/, nothing to sign"; exit 0; }
+
+          # Use CODESIGNING_FOLDER_PATH when Xcode set it (it's the bundle
+          # actually being signed, which differs between `build` and
+          # `archive` actions). Fall back to TARGET_BUILD_DIR for plain
+          # builds, then BUILT_PRODUCTS_DIR as a last resort.
+          APP_PATH="${CODESIGNING_FOLDER_PATH:-${TARGET_BUILD_DIR:-$BUILT_PRODUCTS_DIR}/$PRODUCT_NAME.app}"
+          BIN_DIR="$APP_PATH/Contents/Resources/bin"
+          if [ ! -d "$BIN_DIR" ]; then
+            echo "no embedded bin/ at $BIN_DIR, nothing to sign"
+            exit 0
+          fi
 
           # Skip on ad-hoc / unsigned debug builds — hardened runtime + a
           # secure timestamp both require a real Developer ID identity.
@@ -88,7 +98,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bensquire.AudiobookForge
         GENERATE_INFOPLIST_FILE: NO
-        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # User-script sandbox blocks our post-build signing script from
+        # reading Resources/bin/* even though it lives inside the bundle.
+        # The scripts are first-party and already vetted, so the sandbox
+        # adds friction without a real security win for this project.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         SWIFT_EMIT_LOC_STRINGS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
