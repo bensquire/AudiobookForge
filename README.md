@@ -12,6 +12,7 @@ encode queue.**
 [![Downloads](https://img.shields.io/github/downloads/bensquire/AudiobookForge/total?label=downloads&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007aff?logo=apple&v=2)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/swift-5.10-f05138?logo=swift&v=2)](https://swift.org)
+[![License](https://img.shields.io/github/license/bensquire/AudiobookForge?label=license&cacheSeconds=300&v=2)](LICENSE)
 
 [**Download latest →**](https://github.com/bensquire/AudiobookForge/releases/latest) ·
 [Releases](https://github.com/bensquire/AudiobookForge/releases) ·
@@ -111,4 +112,15 @@ scripts/release.sh 0.1.0
 
 ## License
 
-TBD.
+The AudiobookForge source code is released under the **[MIT License](LICENSE)** —
+use it, fork it, ship a closed-source product based on it, do whatever; just
+keep the copyright notice and don't sue me if it eats your library.
+
+### Third-party components
+
+Release DMGs ship a bundled `ffmpeg`/`ffprobe` (audio decode + AAC encode +
+MP4 mux) which is licensed under the **GPL v2 or later** for the build
+configuration used. That obligation is independent of the MIT license on the
+source — see [RELEASING.md](RELEASING.md) and each release's notes for the
+corresponding upstream source links and the rest of the GPL compliance
+boilerplate.
