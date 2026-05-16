@@ -2,8 +2,17 @@ import Foundation
 import AVFoundation
 import CoreMedia
 
-/// Read duration and basic ID3 tags from an audio file using AVFoundation —
-/// no ffprobe shell-out needed for this step, which keeps drag-drop snappy.
+/// Probe an audio file for duration, tags, codec, and bitrate.
+///
+/// We split sources of truth:
+/// - AVFoundation: fast, async, gives us duration, tags, codec, sample
+///   rate, channels — all needed at drag-drop time without a subprocess.
+/// - ffprobe (bundled): more accurate audio-stream bitrate. AVFoundation
+///   reports `estimatedDataRate` which is the container's byte rate
+///   divided across tracks. For MP3 files with chunky embedded cover art
+///   (common in audiobooks) that overstates the actual audio bitrate by
+///   the cover-art payload. ffprobe reads the codec context's `bit_rate`
+///   directly, so a 64 kbps audiobook reports 64k instead of 80k.
 enum AudioProbe {
     struct Probed {
         var title: String?
@@ -22,6 +31,7 @@ enum AudioProbe {
         async let durationCM = try? asset.load(.duration)
         async let meta = try? asset.load(.commonMetadata)
         async let id3 = try? asset.loadMetadata(for: .id3Metadata)
+        async let ffprobeBR = ffprobeBitrate(url)
 
         var probed = Probed(duration: 0)
 
@@ -34,8 +44,13 @@ enum AudioProbe {
 
         if let tracks = try? await asset.loadTracks(withMediaType: .audio),
            let audio = tracks.first {
-            if let rate = try? await audio.load(.estimatedDataRate),
-               rate.isFinite, rate > 0 {
+            // Prefer ffprobe — see file header for why. Fall back to
+            // AVFoundation's estimate when ffprobe can't determine it
+            // (e.g. bundled binary missing in a dev build).
+            if let ff = await ffprobeBR {
+                probed.bitrate = ff
+            } else if let rate = try? await audio.load(.estimatedDataRate),
+                      rate.isFinite, rate > 0 {
                 probed.bitrate = Int(rate)
             }
             // Codec / sample rate / channels — needed to decide whether we
@@ -71,5 +86,42 @@ enum AudioProbe {
         }
 
         return probed
+    }
+
+    /// Audio-stream bitrate as reported by ffprobe (bits/sec). Returns nil
+    /// if the binary is missing, the file is unreadable, or the codec
+    /// context has no bit_rate field (some lossless containers).
+    private static func ffprobeBitrate(_ url: URL) async -> Int? {
+        guard let ffprobe = Bundled.binary("ffprobe") else { return nil }
+
+        let process = Process()
+        process.executableURL = ffprobe
+        process.arguments = [
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=bit_rate",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            url.path,
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        return await withCheckedContinuation { (cont: CheckedContinuation<Int?, Never>) in
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = String(decoding: data, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // ffprobe prints "N/A" for streams without a stored bit_rate
+                // (e.g. raw PCM in WAV); treat that as "no answer".
+                cont.resume(returning: text == "N/A" ? nil : Int(text))
+            }
+            do {
+                try process.run()
+            } catch {
+                cont.resume(returning: nil)
+            }
+        }
     }
 }
