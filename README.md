@@ -38,6 +38,18 @@ open build/Build/Products/Debug/AudiobookForge.app
 
 Or open `AudiobookForge.xcodeproj` in Xcode after running `xcodegen generate`.
 
+## Tests
+
+```bash
+./scripts/test.sh                                    # whole suite
+./scripts/test.sh -only OutputPathResolverTests      # single class
+```
+
+The unit suite covers the pure logic — path resolution, codec parsing,
+chapter-file building, encode-job helpers, formatting, model invariants,
+queue manager. SwiftUI views and subprocess-driven services (ffmpeg,
+ffprobe, metadata APIs) aren't unit-tested; those want integration tests.
+
 ## Project layout
 
 ```

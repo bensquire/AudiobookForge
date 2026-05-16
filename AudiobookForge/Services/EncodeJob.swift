@@ -159,7 +159,7 @@ final class EncodeJob {
     /// True when every source file already uses a codec/sample-rate/channel
     /// layout that MP4 supports natively and the user hasn't asked for a
     /// specific output bitrate.
-    static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
+    nonisolated static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
         guard settings.bitrate == .source else { return false }
         guard let first = chapters.first, first.codec.isMP4RemuxFriendly else { return false }
         return chapters.dropFirst().allSatisfy {
@@ -169,7 +169,7 @@ final class EncodeJob {
         }
     }
 
-    static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
+    nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
         switch settings.bitrate {
         case .source:
             let total = chapters.reduce(0.0) { $0 + $1.duration }
@@ -189,8 +189,8 @@ final class EncodeJob {
     /// Apply the user's `filenameTemplate` to a base directory and metadata.
     /// Used at enqueue time to compute `plannedOutputURL` before any encode
     /// has run — this is what we surface in the queue UI.
-    static func resolveOutputURL(in base: URL, metadata: BookMetadata,
-                                 template: String) -> URL {
+    nonisolated static func resolveOutputURL(in base: URL, metadata: BookMetadata,
+                                             template: String) -> URL {
         var path = template
         let tokens: [(String, String)] = [
             ("{title}", metadata.title),
@@ -204,7 +204,7 @@ final class EncodeJob {
         return base.appendingPathComponent(path)
     }
 
-    private static func sanitize(_ s: String) -> String {
+    nonisolated private static func sanitize(_ s: String) -> String {
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
         return s.components(separatedBy: illegal).joined(separator: "_")
                 .trimmingCharacters(in: .whitespaces)
