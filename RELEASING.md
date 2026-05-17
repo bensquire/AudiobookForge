@@ -1,8 +1,9 @@
 # Releasing AudiobookForge
 
 Cutting a signed, notarized DMG that Mac users can install without
-Gatekeeper warnings. End-to-end: ~6 minutes in CI once the secrets are in
-place.
+Gatekeeper warnings. End-to-end in CI: ~6 minutes on a cached ffmpeg
+build, ~15 minutes on a cache miss (the bundled ffmpeg is rebuilt from
+source — see [Bundled ffmpeg](#bundled-ffmpeg) below).
 
 ## One-time setup
 
@@ -82,17 +83,20 @@ git push origin v0.1.0
 
 The `release.yml` workflow fires on `v*` tags:
 
-1. Imports the Developer ID cert into a throwaway keychain
-2. `xcodebuild archive` with `MARKETING_VERSION=0.1.0` and
+1. Restores (or builds, on cache miss) the bundled ffmpeg via
+   `scripts/build-ffmpeg.sh` — cache key includes the script hash, so
+   any pinned-version or configure-flag change invalidates it
+2. Imports the Developer ID cert into a throwaway keychain
+3. `xcodebuild archive` with `MARKETING_VERSION=<tag>` and
    `CURRENT_PROJECT_VERSION=<commit-count>`
-3. `xcodebuild -exportArchive` with `developer-id` distribution
-4. Submits the `.app` to Apple's notary service (`xcrun notarytool submit
+4. `xcodebuild -exportArchive` with `developer-id` distribution
+5. Submits the `.app` to Apple's notary service (`xcrun notarytool submit
    --wait`), staples the ticket
-5. Packages a polished DMG via `create-dmg` (with the standard
+6. Packages a polished DMG via `create-dmg` (with the standard
    drag-to-Applications layout)
-6. Signs the DMG, notarizes the DMG, staples
-7. Creates a GitHub Release with auto-generated notes from `git log` and
-   attaches the DMG
+7. Signs the DMG, notarizes the DMG, staples
+8. Creates a GitHub Release with auto-generated notes from `git log` and
+   the third-party ffmpeg + libfdk_aac attribution footer; attaches the DMG
 
 Watch progress in the **Actions** tab. Notarization is the slow step
 (~3–5 min usually, occasionally >15). The workflow times out at 60.
@@ -113,7 +117,7 @@ export APPLE_API_KEY_ID=XXXXXXXXXX
 export APPLE_API_ISSUER_ID=00000000-0000-0000-0000-000000000000
 export APPLE_API_KEY_PATH=~/Downloads/AuthKey_XXXXXXXXXX.p8
 
-brew install xcodegen create-dmg
+brew install xcodegen create-dmg nasm pkg-config
 scripts/release.sh 0.1.0
 ```
 
@@ -144,10 +148,35 @@ All three should pass cleanly.
 | Symptom | Cause |
 |---|---|
 | `errSecInternalComponent` during signing | Keychain locked. CI handles this; locally, run `security unlock-keychain login.keychain`. |
-| `Notarization status: Invalid` | Run `xcrun notarytool log <submission-id> ...` for the JSON report. Usually a missing hardened-runtime entitlement or an unsigned nested binary (check the bundled `ffmpeg`/`ffprobe` got signed — they do automatically via the embedded resource phase). |
+| `Notarization status: Invalid` | Run `xcrun notarytool log <submission-id> ...` for the JSON report. Usually a missing hardened-runtime entitlement or an unsigned nested binary (check the bundled `ffmpeg` got signed — it does automatically via the postBuildScript). |
 | Gatekeeper still complains after install | Staple didn't run, or DMG wasn't notarized. Use the verification commands above. |
 | "The application can't be opened" | Sometimes Finder caches the assessment. `xattr -dr com.apple.quarantine /Applications/AudiobookForge.app` clears it. |
 | 403 on App Store Connect API | Key has expired (1 year max) or the role is too low. Recreate as **Developer**. |
+
+## Bundled ffmpeg
+
+The release pipeline builds `ffmpeg` from source (`scripts/build-ffmpeg.sh`)
+with `libfdk_aac` statically linked and the binary stripped to only the
+codecs/muxers/demuxers we use (audio-only — no GPL video components). The
+result is a ~10–12 MB arm64 binary in `Resources/bin/`.
+
+- **ffmpeg** ships under **LGPL v2.1+** in this configuration. The
+  release notes footer (auto-generated in `release.yml`) carries the
+  attribution + upstream source link.
+- **libfdk_aac** ships under the **Fraunhofer FDK AAC Codec Library
+  License**, free for distribution in commercial products. Same footer
+  carries that attribution.
+
+CI caches the built binary by hash of `build-ffmpeg.sh`, so version
+bumps or configure-flag changes invalidate the cache automatically and
+everything else uses the cached binary.
+
+## Apple Silicon only
+
+The app is `ARCHS = arm64` and the bundled ffmpeg is arm64-only. The
+DMG won't launch on Intel Macs. This is a deliberate scope decision; if
+Intel support is ever needed, both `project.yml` and
+`scripts/build-ffmpeg.sh` need universal-binary changes.
 
 ## What's not here yet
 
@@ -155,8 +184,6 @@ All three should pass cleanly.
   reads an `appcast.xml` you'd publish to GitHub Pages alongside each
   release. The build-number we already emit makes upgrade comparisons
   straightforward.
-- **Universal-binary verification step** that fails the build if the
-  bundled `ffmpeg` isn't `arm64 + x86_64`.
-- **Mac App Store path**. Requires an LGPL-only `ffmpeg` build (or
-  swapping the encoder for AVFoundation) — see the licensing note in
-  `README.md`.
+- **Mac App Store path**. Requires dropping `libfdk_aac` (Fraunhofer
+  license isn't OSI-approved) or swapping the encoder for AVFoundation
+  — see the README's License section.

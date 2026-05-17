@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# Install dev dependencies (XcodeGen) and fetch the bundled ffmpeg binary.
+# Install dev dependencies and build the bundled ffmpeg.
+# First run takes ~7-10 min because it builds ffmpeg + fdk-aac from
+# source; subsequent runs short-circuit if the binary is already there.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-if ! command -v xcodegen >/dev/null 2>&1; then
-  echo "==> Installing xcodegen via Homebrew"
+need=()
+for cmd in xcodegen nasm pkg-config; do
+  command -v "$cmd" >/dev/null 2>&1 || need+=("$cmd")
+done
+if [[ ${#need[@]} -gt 0 ]]; then
+  echo "==> Installing via Homebrew: ${need[*]}"
   if ! command -v brew >/dev/null 2>&1; then
     echo "Homebrew is required. Install from https://brew.sh first." >&2
     exit 1
   fi
-  brew install xcodegen
+  brew install "${need[@]}"
 fi
 
-bash "$ROOT/scripts/fetch-ffmpeg.sh"
+bash "$ROOT/scripts/build-ffmpeg.sh"
 
 echo "==> Generating Xcode project"
 xcodegen generate

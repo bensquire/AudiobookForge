@@ -54,18 +54,18 @@ jobs:
           echo "Version=$VERSION  Numeric=$NUMERIC_VERSION  Build=$BUILD  Prerelease=$IS_PRERELEASE"
 
       - name: Install build tools
-        run: brew install xcodegen create-dmg
+        run: brew install xcodegen create-dmg nasm pkg-config
 
-      - name: Cache ffmpeg
+      - name: Cache bundled ffmpeg
         id: cache-ffmpeg
         uses: actions/cache@v4
         with:
           path: AudiobookForge/Resources/bin
-          key: ffmpeg-universal-v1
+          key: ffmpeg-arm64-${{ hashFiles('scripts/build-ffmpeg.sh') }}
 
-      - name: Fetch ffmpeg
+      - name: Build ffmpeg
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        run: ./scripts/fetch-ffmpeg.sh
+        run: ./scripts/build-ffmpeg.sh
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -207,26 +207,33 @@ jobs:
             echo
             echo "### Open-source components"
             echo
-            echo "AudiobookForge bundles a copy of **FFmpeg** (\`$FF_BANNER\`) for"
-            echo "audio decoding, AAC encoding, and MP4 muxing. FFmpeg is distributed"
-            echo "under the **GNU GPL v2 (or later)** for the build configuration used"
-            echo "here (which includes GPL components such as x264 and x265)."
+            echo "AudiobookForge bundles a copy of **FFmpeg** (\`$FF_BANNER\`) built"
+            echo "from source with **\`libfdk_aac\`** statically linked for AAC"
+            echo "encoding. We strip ffmpeg to only the codecs/demuxers/muxers we"
+            echo "actually use (audio-only, no GPL video components); see"
+            echo "\`scripts/build-ffmpeg.sh\` in the source for the exact configure"
+            echo "flags."
             echo
-            echo "- **Upstream source for this exact FFmpeg version:**"
+            echo "- **FFmpeg** is distributed under the **LGPL v2.1 or later** in"
+            echo "  the configuration we ship."
+            echo "  Upstream source for the bundled version:"
             echo "  <https://github.com/FFmpeg/FFmpeg/releases/tag/n$FF_VERSION>"
-            echo "  (tarball: <https://ffmpeg.org/releases/ffmpeg-$FF_VERSION.tar.xz>)"
-            echo "- **Prebuilt static-binary source notes (macOS arm64 + x86_64):**"
-            echo "  <https://www.osxexperts.net> and <https://evermeet.cx/ffmpeg/>"
-            echo "- **GPL v2 license text:** <https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>"
+            echo "  (tarball: <https://ffmpeg.org/releases/ffmpeg-$FF_VERSION.tar.xz>)."
+            echo "  LGPL text: <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt>"
+            echo "- **libfdk_aac** is distributed under the **Fraunhofer FDK AAC"
+            echo "  Codec Library License**, free for distribution in commercial"
+            echo "  products. Source: <https://github.com/mstorsjo/fdk-aac>."
+            echo "  License text:"
+            echo "  <https://github.com/mstorsjo/fdk-aac/blob/master/NOTICE>"
             echo
-            echo "Per the GPL, the corresponding source code for the FFmpeg version"
-            echo "bundled with this release is available at the upstream link above"
-            echo "for at least three years from the date of this release. If that"
-            echo "link is ever broken, open an issue on this repo and we'll provide"
-            echo "the source by other means."
+            echo "Corresponding source for the bundled FFmpeg and libfdk_aac at the"
+            echo "exact versions shipped with this release is available at the"
+            echo "upstream links above for at least three years from the date of"
+            echo "this release. If those links ever break, open an issue and we"
+            echo "will provide the source by other means."
             echo
-            echo "AudiobookForge's own source is at <https://github.com/${GITHUB_REPOSITORY}>"
-            echo "and is not GPL-encumbered — only the bundled FFmpeg binary is."
+            echo "AudiobookForge's own source is MIT-licensed at"
+            echo "<https://github.com/${GITHUB_REPOSITORY}>."
           } > release_notes.md
 
       - name: Publish GitHub Release

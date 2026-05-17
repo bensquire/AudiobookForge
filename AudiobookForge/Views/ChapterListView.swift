@@ -6,6 +6,7 @@ struct ChapterListView: View {
     @State private var selection = Set<Chapter.ID>()
     @State private var isImporting = false
     @State private var isTargeted = false
+    @State private var confirmClear = false
 
     var body: some View {
         @Bindable var project = project
@@ -42,12 +43,15 @@ struct ChapterListView: View {
         }
     }
 
-    /// Pulled out so the row builders close over `Binding`s into the
-    /// chapters array by index — gives us O(1) title bindings instead of
-    /// the O(n) `firstIndex(where:)` per keystroke we had before.
+    /// Pulled out so we can close over a fresh per-render `indexByID`
+    /// dictionary for the row-number column. Title binding goes through
+    /// `titleBinding(for:)` which looks up by id at access time — Table's
+    /// row closures hold stale `chap` references during diffs (notably
+    /// after a `project.reset()`), and index-based bindings into the
+    /// array would crash on the now-empty array.
     @ViewBuilder
-    private func chapterTable(bindable: Bindable<AudiobookProject>) -> some View {
-        let chapters = bindable.wrappedValue.chapters
+    private func chapterTable(bindable _: Bindable<AudiobookProject>) -> some View {
+        let chapters = project.chapters
         let indexByID = Dictionary(
             uniqueKeysWithValues: chapters.enumerated().map { ($1.id, $0) }
         )
@@ -61,10 +65,8 @@ struct ChapterListView: View {
             .width(min: 24, ideal: 32, max: 40)
 
             TableColumn("Title") { chap in
-                if let i = indexByID[chap.id] {
-                    TextField("", text: bindable.chapters[i].title)
-                        .textFieldStyle(.plain)
-                }
+                TextField("", text: titleBinding(for: chap.id))
+                    .textFieldStyle(.plain)
             }
 
             TableColumn("Duration") { chap in
@@ -93,6 +95,19 @@ struct ChapterListView: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
             }
+            if hasDraftWork {
+                Button {
+                    if project.canEnqueue {
+                        confirmClear = true
+                    } else {
+                        project.reset()
+                    }
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                }
+                .controlSize(.small)
+                .help("Discard the current book and start over")
+            }
             Button {
                 isImporting = true
             } label: {
@@ -101,6 +116,22 @@ struct ChapterListView: View {
             .controlSize(.small)
         }
         .padding(10)
+        .confirmationDialog(
+            "Discard current book?",
+            isPresented: $confirmClear,
+            titleVisibility: .visible
+        ) {
+            Button("Discard", role: .destructive) { project.reset() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Chapters and metadata will be cleared. Output folder, bitrate, and gain settings are kept.")
+        }
+    }
+
+    private var hasDraftWork: Bool {
+        !project.chapters.isEmpty
+            || !project.metadata.isEmpty
+            || project.metadata.coverData != nil
     }
 
     private var dropZone: some View {
@@ -123,12 +154,35 @@ struct ChapterListView: View {
 
     // MARK: helpers
 
+    /// Title binding that looks up the chapter by id at access time so it
+    /// survives `chapters` being mutated (cleared on enqueue + reset, etc).
+    /// Index-based bindings would crash the moment the array shrank under
+    /// a stale row closure held by `Table` during a diff.
+    private func titleBinding(for id: Chapter.ID) -> Binding<String> {
+        Binding(
+            get: { project.chapters.first(where: { $0.id == id })?.title ?? "" },
+            set: { newValue in
+                if let i = project.chapters.firstIndex(where: { $0.id == id }) {
+                    project.chapters[i].title = newValue
+                }
+            }
+        )
+    }
+
     private func deleteSelected() {
         project.chapters.removeAll { selection.contains($0.id) }
         selection.removeAll()
     }
 
     private func importPaths(_ urls: [URL]) async {
+        // Hold the sandbox grant on every dropped/picked URL up front —
+        // this includes folders whose children inherit access while the
+        // parent's scope is held. Without this the AudioProbe ffmpeg
+        // pass (and later encode) sees EPERM on the input file.
+        for url in urls {
+            SecurityScope.retain(url)
+        }
+
         let files = await Task.detached(priority: .userInitiated) { () -> [URL] in
             var results: [URL] = []
             for url in urls {

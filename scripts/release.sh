@@ -35,7 +35,7 @@ mkdir -p "$BUILD_DIR"
 TEAM_ID="$APPLE_TEAM_ID" envsubst < scripts/ExportOptions.plist > "$EXPORT_OPTS"
 
 # ---- Ensure ffmpeg binaries are present
-bash scripts/fetch-ffmpeg.sh
+bash scripts/build-ffmpeg.sh
 
 # ---- Regenerate Xcode project so project.yml stays the source of truth
 xcodegen generate --quiet

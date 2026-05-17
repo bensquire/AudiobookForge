@@ -94,6 +94,72 @@ final class AudiobookProjectTests: XCTestCase {
         XCTAssertEqual(total, 300, accuracy: 0.001)
     }
 
+    func test_hydrate_replacesChaptersMetadataAndSettings() {
+        // Arrange — the project starts with some half-edited state the
+        // user wouldn't want to keep after loading a queued item.
+        let project = AudiobookProject()
+        project.chapters = [makeChapter()]
+        project.metadata.title = "stale draft"
+        project.settings.bitrate = .k32
+
+        let spec = EncodeSpec(
+            chapters: [makeChapter(duration: 120), makeChapter(duration: 240)],
+            metadata: { var m = BookMetadata(); m.title = "Dune"; m.author = "FH"; return m }(),
+            settings: {
+                var s = EncodeSettings()
+                s.bitrate = .k192
+                s.gainBoost = .dB6
+                s.outputDirectory = URL(fileURLWithPath: "/out")
+                s.filenameTemplate = "{title}.m4b"
+                return s
+            }(),
+            outputURL: URL(fileURLWithPath: "/out/Dune.m4b")
+        )
+
+        // Act
+        project.hydrate(from: spec)
+
+        // Assert — every field from the spec made it across.
+        XCTAssertEqual(project.chapters.count, 2)
+        XCTAssertEqual(project.totalDuration, 360, accuracy: 0.001)
+        XCTAssertEqual(project.metadata.title, "Dune")
+        XCTAssertEqual(project.metadata.author, "FH")
+        XCTAssertEqual(project.settings.bitrate, .k192)
+        XCTAssertEqual(project.settings.gainBoost, .dB6)
+        XCTAssertEqual(project.settings.outputDirectory?.path, "/out")
+        XCTAssertEqual(project.settings.filenameTemplate, "{title}.m4b")
+    }
+
+    func test_hydrate_roundTripsThroughEncodeSpec() {
+        // Arrange — a populated draft, snapshot it as a spec, mutate the
+        // draft, then hydrate back. Result should equal the snapshot.
+        let project = AudiobookProject()
+        project.chapters = [makeChapter(duration: 60)]
+        project.metadata.title = "A"; project.metadata.author = "B"
+        project.settings.outputDirectory = URL(fileURLWithPath: "/o")
+        project.settings.gainBoost = .autoNormalize
+
+        let snapshot = EncodeSpec(
+            chapters: project.chapters,
+            metadata: project.metadata,
+            settings: project.settings,
+            outputURL: URL(fileURLWithPath: "/o/A.m4b")
+        )
+
+        // Mutate the live project away from the snapshot.
+        project.chapters = []
+        project.metadata.title = "junk"
+        project.settings.gainBoost = .off
+
+        // Act
+        project.hydrate(from: snapshot)
+
+        // Assert
+        XCTAssertEqual(project.chapters.count, 1)
+        XCTAssertEqual(project.metadata.title, "A")
+        XCTAssertEqual(project.settings.gainBoost, .autoNormalize)
+    }
+
     private func makeChapter(duration: TimeInterval = 60) -> Chapter {
         Chapter(
             sourceURL: URL(fileURLWithPath: "/tmp/x.m4a"),

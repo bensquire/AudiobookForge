@@ -23,21 +23,23 @@ jobs:
           xcode-version: latest-stable
 
       - name: Install build tools
-        run: brew install xcodegen swiftformat swiftlint
+        run: brew install xcodegen swiftformat swiftlint nasm pkg-config
 
       - name: Lint
         run: ./scripts/lint.sh
 
-      - name: Cache ffmpeg
+      - name: Cache bundled ffmpeg
         id: cache-ffmpeg
         uses: actions/cache@v4
         with:
           path: AudiobookForge/Resources/bin
-          key: ffmpeg-universal-v1
+          # Key on the build script so any change (pinned version,
+          # configure flags) busts the cache automatically.
+          key: ffmpeg-arm64-${{ hashFiles('scripts/build-ffmpeg.sh') }}
 
-      - name: Fetch ffmpeg
+      - name: Build ffmpeg
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        run: ./scripts/fetch-ffmpeg.sh
+        run: ./scripts/build-ffmpeg.sh
 
       - name: Generate project
         run: xcodegen generate

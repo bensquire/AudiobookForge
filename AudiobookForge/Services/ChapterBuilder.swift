@@ -39,10 +39,20 @@ enum ChapterBuilder {
     }
 
     static func concatList(for chapters: [Chapter]) -> String {
-        // ffmpeg concat demuxer format. Paths must be single-quoted with any
-        // embedded single-quote escaped as '\''.
-        chapters.map { c in
-            let escaped = c.sourceURL.path.replacingOccurrences(of: "'", with: "'\\''")
+        concatList(paths: chapters.map(\.sourceURL.path))
+    }
+
+    /// Concat-demuxer list pointing at intermediate `.m4a` files produced
+    /// by the parallel-encode Phase 1.
+    static func concatList(forIntermediates urls: [URL]) -> String {
+        concatList(paths: urls.map(\.path))
+    }
+
+    /// ffmpeg concat demuxer format. Paths must be single-quoted with any
+    /// embedded single-quote escaped as `'\''`.
+    private static func concatList(paths: [String]) -> String {
+        paths.map { path in
+            let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
             return "file '\(escaped)'"
         }.joined(separator: "\n") + "\n"
     }

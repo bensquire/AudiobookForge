@@ -46,13 +46,17 @@ struct MetadataPanelView: View {
             }
             .padding(14)
         }
+        // Project reset (Add to Queue, Clear, or Edit-loading another
+        // item) wipes the prep area; the search panel's local state
+        // should follow. resetToken changes only on reset()/hydrate(),
+        // not on the user just deleting their last chapter.
+        .onChange(of: project.resetToken) { _, _ in clearSearch() }
     }
 
     private var coverSection: some View {
         @Bindable var project = project
         return HStack(alignment: .top, spacing: 12) {
-            CoverThumbnail(data: project.metadata.coverData)
-                .frame(width: 96, height: 96)
+            CoverThumbnail(data: project.metadata.coverData, size: 96)
             VStack(alignment: .leading, spacing: 6) {
                 Text(project.metadata.title.isEmpty ? "Untitled" : project.metadata.title)
                     .font(.headline)
@@ -94,6 +98,16 @@ struct MetadataPanelView: View {
                     }
                 }
                 .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || isSearching)
+                if !results.isEmpty || !searchQuery.isEmpty || searchError != nil {
+                    Button {
+                        clearSearch()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear search results")
+                }
             }
             if let err = searchError {
                 Text(err).font(.caption).foregroundStyle(.red)
@@ -114,6 +128,12 @@ struct MetadataPanelView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             TextField("", text: text).textFieldStyle(.roundedBorder)
         }
+    }
+
+    private func clearSearch() {
+        searchQuery = ""
+        results = []
+        searchError = nil
     }
 
     private func runSearch() {
@@ -176,6 +196,7 @@ struct MetadataPanelView: View {
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
+            SecurityScope.retain(url)
             project.metadata.coverData = try? Data(contentsOf: url)
             project.metadata.coverSourceURL = url
         }

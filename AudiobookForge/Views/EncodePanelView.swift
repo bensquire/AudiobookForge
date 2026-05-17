@@ -28,17 +28,17 @@ struct EncodePanelView: View {
                 }
                 .frame(width: 200)
 
-                Picker("Codec", selection: $project.settings.codec) {
-                    ForEach(EncodeSettings.Codec.allCases) { c in
-                        Text(c.rawValue.uppercased()).tag(c)
+                Picker("Gain", selection: $project.settings.gainBoost) {
+                    ForEach(EncodeSettings.GainBoost.allCases) { g in
+                        Text(g.label).tag(g)
                     }
                 }
-                .frame(width: 160)
+                .frame(width: 200)
 
                 Spacer()
-
-                outputControl
             }
+
+            outputControl
 
             if willRemux {
                 Label("Lossless remux — sources are already AAC, no re-encode needed",
@@ -70,17 +70,38 @@ struct EncodePanelView: View {
         .onChange(of: queue.items.count) { _, _ in refreshPlannedOutput() }
     }
 
+    /// Labelled row. The label flips between the generic "Output folder"
+    /// when nothing is picked and the actual destination directory once a
+    /// folder is selected (folder name + any template subdirs that will
+    /// be created from metadata). The button stays as a stable "Change…"
+    /// affordance.
+    /// "Output: [📁 Folder name ▾]" — the labelled-button idiom used by
+    /// Permute, Bakery, Audiobook Builder etc. The button itself carries
+    /// the current selection (last path component); full path lives in
+    /// the tooltip.
     private var outputControl: some View {
-        @Bindable var project = project
-        return HStack(spacing: 6) {
-            Text(project.settings.outputDirectory?.path ?? "No output folder")
-                .lineLimit(1)
-                .truncationMode(.middle)
+        let dir = project.settings.outputDirectory
+        return HStack(spacing: 8) {
+            Text("Output:")
                 .foregroundStyle(.secondary)
-                .font(.caption)
-                .frame(maxWidth: 280, alignment: .trailing)
-            Button("Output…") { chooseOutputDir() }
-                .controlSize(.small)
+            Button(action: chooseOutputDir) {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                    Text(dir?.lastPathComponent ?? "Choose folder…")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .help(dir?.path ?? "")
+            Spacer(minLength: 12)
+            if let format = outputFormatLabel {
+                Text(format)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 
@@ -97,13 +118,39 @@ struct EncodePanelView: View {
         .disabled(!project.canEnqueue)
     }
 
+    /// "192 kbps · Stereo · AAC · +6 dB" — the actual format the .m4b
+    /// will be written in, given the current bitrate, source channel
+    /// layout, and gain setting. Hidden until chapters are dropped
+    /// because channel info isn't known otherwise.
+    private var outputFormatLabel: String? {
+        guard let first = project.chapters.first else { return nil }
+        let bitrate = EncodeJob.resolveBitrate(
+            chapters: project.chapters, settings: project.settings
+        ).replacingOccurrences(of: "k", with: " kbps")
+        let channels = channelLayoutLabel(first.channels)
+        return [bitrate, channels, "AAC", project.settings.gainBoost.suffix]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    private func channelLayoutLabel(_ count: Int) -> String {
+        switch count {
+        case 1: "Mono"
+        case 2: "Stereo"
+        case 6: "5.1"
+        case 8: "7.1"
+        default: count > 0 ? "\(count) ch" : ""
+        }
+    }
+
     private func chooseOutputDir() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK {
-            project.settings.outputDirectory = panel.url
+        if panel.runModal() == .OK, let url = panel.url {
+            SecurityScope.retain(url)
+            project.settings.outputDirectory = url
         }
     }
 }

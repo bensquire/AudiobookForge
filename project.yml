@@ -26,14 +26,14 @@ targets:
           - "Resources/bin/**"
       # type: folder makes Xcode treat this as a folder reference — its
       # contents are resolved at build time, not xcodegen time. That lets
-      # us run `xcodegen generate` before `scripts/fetch-ffmpeg.sh` and
+      # us run `xcodegen generate` before `scripts/build-ffmpeg.sh` and
       # still get a populated bin/ inside the app at build time.
       - path: AudiobookForge/Resources/bin
         type: folder
         optional: true
         buildPhase: resources
     postBuildScripts:
-      # Bundled Mach-O binaries (ffmpeg / ffprobe) aren't auto-signed by
+      # The bundled Mach-O binary (ffmpeg) isn't auto-signed by
       # Xcode — only frameworks in known paths are. For notarization to
       # succeed each one must carry a hardened-runtime signature with a
       # secure timestamp. This script runs after Copy Resources and before
@@ -97,6 +97,11 @@ targets:
       base:
         PRODUCT_NAME: AudiobookForge
         PRODUCT_BUNDLE_IDENTIFIER: com.bensquire.AudiobookForge
+        # arm64 only. The bundled ffmpeg is arm64-only too (see
+        # scripts/build-ffmpeg.sh) so there's no x86_64 path that could
+        # ever run end-to-end. Saves ~half the bundle size.
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
         GENERATE_INFOPLIST_FILE: NO
         # User-script sandbox blocks our post-build signing script from
         # reading Resources/bin/* even though it lives inside the bundle.

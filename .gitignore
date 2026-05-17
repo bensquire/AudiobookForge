@@ -11,6 +11,9 @@ xcuserdata/
 AudiobookForge.xcodeproj/
 AudiobookForge/Resources/bin/
 
+# ffmpeg build workspace
+.build-ffmpeg/
+
 # macOS
 .DS_Store
 

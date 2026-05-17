@@ -88,6 +88,57 @@ enum FFmpegRunner {
         return tail.joined()
     }
 
+    /// One-shot ffmpeg invocation that captures full stderr. Used by
+    /// short metadata probes and the ebur128 measurement pass. Returns
+    /// nil if the bundled binary is missing or `process.run()` throws.
+    /// If `cancelToken` fires mid-run, the child is terminated and any
+    /// stderr captured so far is returned (callers typically treat that
+    /// as "couldn't measure" and fall back).
+    static func captureStderr(
+        arguments: [String],
+        cancelToken: CancelToken = .init()
+    ) async -> String? {
+        guard let ffmpeg = Bundled.binary("ffmpeg") else { return nil }
+
+        let process = Process()
+        process.executableURL = ffmpeg
+        process.arguments = ["-hide_banner", "-nostdin"] + arguments
+
+        let stderr = Pipe()
+        process.standardError = stderr
+        process.standardOutput = FileHandle.nullDevice
+
+        // Drain stderr proactively. Filters like `ebur128` print
+        // continuously; reading only inside `terminationHandler` lets
+        // the kernel pipe buffer (~64 KB) fill, ffmpeg blocks on its
+        // next write, and the process never exits → deadlock with zero
+        // CPU. Same pattern as `run()`.
+        let buffer = StderrBuffer()
+        stderr.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            buffer.append(chunk)
+        }
+
+        return await withCheckedContinuation { cont in
+            process.terminationHandler = { _ in
+                stderr.fileHandleForReading.readabilityHandler = nil
+                let remaining = stderr.fileHandleForReading.readDataToEndOfFile()
+                if !remaining.isEmpty { buffer.append(remaining) }
+                cont.resume(returning: buffer.text())
+            }
+            cancelToken.setOnCancel { [weak process] in
+                process?.terminate()
+            }
+            do {
+                try process.run()
+            } catch {
+                stderr.fileHandleForReading.readabilityHandler = nil
+                cont.resume(returning: nil)
+            }
+        }
+    }
+
     /// Parse `…time=01:23:45.67 …` from an ffmpeg progress line.
     private static func parseTime(_ line: String) -> TimeInterval? {
         guard let range = line.range(of: "time=") else { return nil }
@@ -106,10 +157,16 @@ enum FFmpegRunner {
 /// Thread-safe cancellation signal shared between caller (any actor) and
 /// the ffmpeg invocation. `cancel()` may arrive from the UI's MainActor
 /// while `run()` is reading stderr on a background queue.
+///
+/// Handlers are **appended**, not replaced — multiple layers can each
+/// register interest in the cancel without clobbering each other. (This
+/// matters for EncodeJob, which both cascades to per-chunk tokens AND
+/// passes the token to `FFmpegRunner.run` which registers its own
+/// `process.terminate()` handler.)
 final class CancelToken: @unchecked Sendable {
     private let lock = NSLock()
     private var _isCancelled = false
-    private var _onCancel: (() -> Void)?
+    private var handlers: [() -> Void] = []
 
     init() {}
 
@@ -121,19 +178,42 @@ final class CancelToken: @unchecked Sendable {
     func setOnCancel(_ handler: @escaping () -> Void) {
         lock.lock()
         let wasCancelled = _isCancelled
-        _onCancel = handler
+        if !wasCancelled { handlers.append(handler) }
         lock.unlock()
-        // If we were already cancelled before the handler was set, fire it
-        // immediately so the caller doesn't miss the signal.
+        // If we were already cancelled before the handler was registered,
+        // fire it immediately so the caller doesn't miss the signal.
         if wasCancelled { handler() }
     }
 
     func cancel() {
         lock.lock()
+        if _isCancelled {
+            lock.unlock()
+            return
+        }
         _isCancelled = true
-        let handler = _onCancel
+        let snapshot = handlers
+        handlers.removeAll()
         lock.unlock()
-        handler?()
+        snapshot.forEach { $0() }
+    }
+}
+
+/// Drain target for `captureStderr` — raw bytes, locked so the
+/// readabilityHandler closure can append concurrently with the
+/// terminationHandler's final flush.
+private final class StderrBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock(); defer { lock.unlock() }
+        data.append(chunk)
+    }
+
+    func text() -> String {
+        lock.lock(); defer { lock.unlock() }
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

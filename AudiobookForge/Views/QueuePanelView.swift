@@ -62,8 +62,10 @@ struct QueuePanelView: View {
 
 private struct QueueRow: View {
     @Environment(QueueManager.self) private var queue
+    @Environment(AudiobookProject.self) private var project
     let item: QueueItem
     @State private var hovering = false
+    @State private var pendingMode: HydrateMode?
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -76,8 +78,7 @@ private struct QueueRow: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 10) {
-                    CoverThumbnail(data: item.spec.metadata.coverData, cornerRadius: 4)
-                        .frame(width: 40, height: 40)
+                    CoverThumbnail(data: item.spec.metadata.coverData, size: 40, cornerRadius: 4)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title.isEmpty ? "Untitled" : item.title)
                             .font(.callout).bold()
@@ -132,6 +133,25 @@ private struct QueueRow: View {
         )
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
+        .confirmationDialog(
+            "Replace current prep area?",
+            isPresented: Binding(
+                get: { pendingMode != nil },
+                set: { if !$0 { pendingMode = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingMode
+        ) { mode in
+            Button("Replace", role: .destructive) { applyHydrate(mode: mode) }
+            Button("Cancel", role: .cancel) {}
+        } message: { mode in
+            switch mode {
+            case .edit:
+                Text("Loading this item will discard the book you're currently prepping.")
+            case .duplicate:
+                Text("Duplicating this item will discard the book you're currently prepping.")
+            }
+        }
     }
 
     private var actionRow: some View {
@@ -140,6 +160,17 @@ private struct QueueRow: View {
             if item.status.isSucceeded, let url = item.finalOutputURL {
                 rowButton("Reveal", systemImage: "folder") {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+                rowButton("Duplicate", systemImage: "plus.square.on.square") {
+                    requestHydrate(mode: .duplicate)
+                }
+            }
+            // Editable states: anything not running and not already done.
+            // Succeeded items use Duplicate above; running items have to
+            // be cancelled first.
+            if item.status.isPending || item.status.isRetryable {
+                rowButton("Edit", systemImage: "pencil") {
+                    requestHydrate(mode: .edit)
                 }
             }
             if item.status.isRetryable {
@@ -153,6 +184,23 @@ private struct QueueRow: View {
         }
     }
 
+    /// Either show the confirm dialog (if the prep area has work) or
+    /// apply the hydrate immediately.
+    private func requestHydrate(mode: HydrateMode) {
+        if project.canEnqueue {
+            pendingMode = mode
+        } else {
+            applyHydrate(mode: mode)
+        }
+    }
+
+    private func applyHydrate(mode: HydrateMode) {
+        project.hydrate(from: item.spec)
+        if mode == .edit {
+            queue.remove(item)
+        }
+    }
+
     private func rowButton(_ label: String, systemImage: String,
                            action: @escaping () -> Void) -> some View
     {
@@ -163,6 +211,16 @@ private struct QueueRow: View {
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
+    }
+}
+
+/// The user's intent when hydrating a queued item back into the prep
+/// area. `Identifiable` so it can drive `confirmationDialog(presenting:)`
+/// directly — no wrapper struct needed.
+private enum HydrateMode: String, Identifiable {
+    case edit, duplicate
+    var id: String {
+        rawValue
     }
 }
 
