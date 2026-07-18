@@ -2,24 +2,7 @@ import XCTest
 @testable import AudiobookForge
 
 @MainActor
-final class QueueManagerTests: XCTestCase {
-    private var tmp: URL!
-
-    override func setUp() {
-        super.setUp()
-        // swiftlint:disable:next force_try
-        tmp = try! FileManager.default.url(
-            for: .itemReplacementDirectory, in: .userDomainMask,
-            appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-            create: true
-        )
-    }
-
-    override func tearDown() {
-        try? FileManager.default.removeItem(at: tmp)
-        super.tearDown()
-    }
-
+final class QueueManagerTests: QueueTestCase {
     // MARK: - plannedOutputURL
 
     func test_plannedOutputURL_returnsNilWithoutOutputDirectory() {
@@ -163,31 +146,5 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertFalse(QueueItem.Status.succeeded.isRetryable)
         XCTAssertFalse(QueueItem.Status.pending.isRetryable)
         XCTAssertFalse(QueueItem.Status.running.isRetryable)
-    }
-
-    // MARK: - helpers
-
-    private func makeDraft(
-        outputDir: URL?,
-        title: String = "x",
-        author: String = "y",
-        template: String = "{title}.m4b"
-    ) -> AudiobookProject {
-        let p = AudiobookProject()
-        p.chapters = [
-            Chapter(
-                sourceURL: URL(fileURLWithPath: "/tmp/nonexistent.m4a"),
-                title: "t",
-                duration: 60,
-                codec: .aac,
-                sampleRate: 44100,
-                channels: 2
-            )
-        ]
-        p.metadata.title = title
-        p.metadata.author = author
-        p.settings.outputDirectory = outputDir
-        p.settings.filenameTemplate = template
-        return p
     }
 }

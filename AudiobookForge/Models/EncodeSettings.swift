@@ -15,6 +15,19 @@ struct EncodeSettings: Equatable {
         var label: String {
             self == .source ? "Match source" : rawValue
         }
+
+        /// Numeric kbps for the fixed cases; nil for `.source`, whose
+        /// value is resolved from the chapters at encode time.
+        var kbps: Int? {
+            switch self {
+            case .k32: 32
+            case .k64: 64
+            case .k96: 96
+            case .k128: 128
+            case .k192: 192
+            case .source: nil
+            }
+        }
     }
 
     /// Optional per-book loudness adjustment applied during encoding.

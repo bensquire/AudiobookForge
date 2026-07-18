@@ -10,7 +10,25 @@ final class QueueManager {
 
     private var running: (item: QueueItem, job: EncodeJob)?
     private var pumpWakeup: CheckedContinuation<Void, Never>?
-    private var pumpTask: Task<Void, Never>?
+    /// nonisolated(unsafe) so deinit (nonisolated) can cancel it;
+    /// Task.cancel() is thread-safe and the property is written once.
+    private nonisolated(unsafe) var pumpTask: Task<Void, Never>?
+
+    /// Held while a batch is being processed. Keeps the system awake and
+    /// exempts us from App Nap — a multi-hour encode with the window
+    /// occluded or the lid closed must not be throttled or suspended.
+    private var activityToken: NSObjectProtocol?
+    private var batchSucceeded = 0
+    private var batchFailed = 0
+
+    /// Fired when the worker picks up the first item of a batch — the app
+    /// layer uses this to request notification permission at a moment the
+    /// user has clearly started long-running work.
+    var onBatchStarted: () -> Void = {}
+    /// Fired when the queue drains after processing ≥1 item, with the
+    /// batch's succeeded/failed counts. Default no-op keeps unit tests
+    /// free of UserNotifications (which needs a host app bundle).
+    var onBatchFinished: (_ succeeded: Int, _ failed: Int) -> Void = { _, _ in }
 
     var isProcessing: Bool {
         running != nil
@@ -20,6 +38,10 @@ final class QueueManager {
         pumpTask = Task { @MainActor [weak self] in
             await self?.pumpLoop()
         }
+    }
+
+    deinit {
+        pumpTask?.cancel()
     }
 
     // MARK: - Public API
@@ -108,11 +130,33 @@ final class QueueManager {
     private func pumpLoop() async {
         while !Task.isCancelled {
             guard let next = items.first(where: { $0.status.isPending }) else {
+                finishBatch()
                 await waitForWork()
                 continue
             }
+            startBatchIfNeeded()
             await process(next)
         }
+    }
+
+    private func startBatchIfNeeded() {
+        guard activityToken == nil else { return }
+        onBatchStarted()
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "Encoding audiobooks"
+        )
+    }
+
+    private func finishBatch() {
+        guard let token = activityToken else { return }
+        ProcessInfo.processInfo.endActivity(token)
+        activityToken = nil
+        if batchSucceeded + batchFailed > 0 {
+            onBatchFinished(batchSucceeded, batchFailed)
+        }
+        batchSucceeded = 0
+        batchFailed = 0
     }
 
     private func waitForWork() async {
@@ -135,7 +179,7 @@ final class QueueManager {
 
         if let problem = preflight(item) {
             let msg = (problem as? LocalizedError)?.errorDescription ?? "\(problem)"
-            item.status = .failed(msg)
+            conclude(item, with: .failed(msg))
             item.progressLabel = nil
             return
         }
@@ -156,16 +200,28 @@ final class QueueManager {
             let finalURL = try await job.run()
             item.finalOutputURL = finalURL
             item.progress = 1
-            item.status = .succeeded
+            conclude(item, with: .succeeded)
         } catch let e as FFmpegRunner.RunError {
             if case .cancelled = e {
-                item.status = .cancelled
+                conclude(item, with: .cancelled)
             } else {
-                item.status = .failed(e.errorDescription ?? "\(e)")
+                conclude(item, with: .failed(e.errorDescription ?? "\(e)"))
             }
         } catch {
             let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-            item.status = .failed(msg)
+            conclude(item, with: .failed(msg))
+        }
+    }
+
+    /// Single seam for terminal transitions so the batch counters can't
+    /// drift from item status (cancelled counts as neither succeeded nor
+    /// failed in the drain notification).
+    private func conclude(_ item: QueueItem, with status: QueueItem.Status) {
+        item.status = status
+        switch status {
+        case .succeeded: batchSucceeded += 1
+        case .failed: batchFailed += 1
+        default: break
         }
     }
 

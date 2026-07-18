@@ -53,8 +53,11 @@ Or open `AudiobookForge.xcodeproj` in Xcode after running `xcodegen generate`.
 
 The unit suite covers the pure logic — path resolution, codec parsing,
 chapter-file building, encode-job helpers, formatting, model invariants,
-queue manager. SwiftUI views and subprocess-driven services (ffmpeg,
-metadata APIs) aren't unit-tested; those want integration tests.
+queue manager. `EncodeJobIntegrationTests` additionally runs the real
+bundled ffmpeg end-to-end (generated sine-wave fixtures → chaptered
+`.m4b`, verified via AVFoundation) plus cancellation regressions, so
+`scripts/build-ffmpeg.sh` must have run first. SwiftUI views and the
+metadata APIs remain untested.
 
 ## Lint & format
 

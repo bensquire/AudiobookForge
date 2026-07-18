@@ -25,6 +25,25 @@ final class AudioCodecTests: XCTestCase {
         XCTAssertEqual(codec, .mp3)
     }
 
+    func test_init_recognisesHEAACProfilesAsDistinctCodecs() {
+        // Arrange — kAudioFormatMPEG4AAC_HE / _HE_V2 FourCCs. These must
+        // NOT collapse into .aac: LC and HE bitstreams can't be mixed in
+        // one `-c:a copy` concat, and codec equality is what canRemux
+        // relies on to prevent that.
+        let heFourCC: FourCharCode = 0x6161_6368 // 'aach'
+        let heV2FourCC: FourCharCode = 0x6161_6370 // 'aacp'
+
+        // Act
+        let he = AudioCodec(fourCC: heFourCC)
+        let heV2 = AudioCodec(fourCC: heV2FourCC)
+
+        // Assert
+        XCTAssertEqual(he, .aacHE)
+        XCTAssertEqual(heV2, .aacHEv2)
+        XCTAssertNotEqual(he, .aac)
+        XCTAssertNotEqual(heV2, .aac)
+    }
+
     func test_init_recognisesALAC() {
         // Arrange
         let fourCC: FourCharCode = 0x616C_6163 // 'alac'
@@ -58,10 +77,14 @@ final class AudioCodecTests: XCTestCase {
         XCTAssertEqual(codec, .unknown("xzzz"))
     }
 
-    func test_isMP4RemuxFriendly_trueOnlyForAAC() {
-        // Arrange / Act / Assert — only AAC may be remuxed straight into
-        // an .m4b without re-encoding.
+    func test_isMP4RemuxFriendly_trueOnlyForAACFamily() {
+        // Arrange / Act / Assert — only the AAC family may be remuxed
+        // straight into an .m4b without re-encoding. Uniform HE books get
+        // the fast path too; mixing profiles is blocked by canRemux's
+        // codec-equality check, not here.
         XCTAssertTrue(AudioCodec.aac.isMP4RemuxFriendly)
+        XCTAssertTrue(AudioCodec.aacHE.isMP4RemuxFriendly)
+        XCTAssertTrue(AudioCodec.aacHEv2.isMP4RemuxFriendly)
         XCTAssertFalse(AudioCodec.mp3.isMP4RemuxFriendly)
         XCTAssertFalse(AudioCodec.alac.isMP4RemuxFriendly)
         XCTAssertFalse(AudioCodec.opus.isMP4RemuxFriendly)

@@ -14,10 +14,23 @@ enum ChapterBuilder {
         out += kv("genre", metadata.genre.isEmpty ? "Audiobook" : metadata.genre)
         out += kv("description", metadata.description)
         out += kv("comment", metadata.description)
+        // `media_type=2` → the mp4 muxer's `stik` atom, which is what
+        // marks the file as an Audiobook in Apple Books / iTunes.
+        out += kv("media_type", "2")
         if !metadata.series.isEmpty {
-            out += kv("TXXX:series", metadata.series)
+            // ffmpeg's mp4 muxer silently drops keys it doesn't know
+            // (verified empirically — TXXX:* never reached the file), so
+            // series info rides on atoms it does write: `show` (tvsh) and
+            // `episode_sort` (tves), plus a human-readable `grouping`
+            // (©grp, the "Series #3" convention several taggers display).
+            out += kv("show", metadata.series)
             if !metadata.seriesPosition.isEmpty {
-                out += kv("TXXX:series-part", metadata.seriesPosition)
+                if Int(metadata.seriesPosition) != nil {
+                    out += kv("episode_sort", metadata.seriesPosition)
+                }
+                out += kv("grouping", "\(metadata.series) #\(metadata.seriesPosition)")
+            } else {
+                out += kv("grouping", metadata.series)
             }
         }
 

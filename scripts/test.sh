@@ -20,7 +20,9 @@ ARGS=()
 if [[ "${1:-}" == "-only" && -n "${2:-}" ]]; then
   ARGS+=(-only-testing:"AudiobookForgeTests/$2")
 fi
-
+# macOS ships bash 3.2, where "${ARGS[@]}" under `set -u` errors on an
+# empty array. `${ARGS[@]+"${ARGS[@]}"}` below is the portable spelling
+# of "all of ARGS, or nothing".
 xcodebuild \
   -project AudiobookForge.xcodeproj \
   -scheme AudiobookForge \
@@ -30,7 +32,7 @@ xcodebuild \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
-  "${ARGS[@]}" \
+  ${ARGS[@]+"${ARGS[@]}"} \
   test \
   | xcpretty 2>/dev/null || xcodebuild \
       -project AudiobookForge.xcodeproj \
@@ -41,5 +43,5 @@ xcodebuild \
       CODE_SIGN_IDENTITY="-" \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGNING_ALLOWED=NO \
-      "${ARGS[@]}" \
+      ${ARGS[@]+"${ARGS[@]}"} \
       test

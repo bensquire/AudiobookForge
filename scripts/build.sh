@@ -23,14 +23,19 @@ xcodegen generate --quiet
 
 case "$MODE" in
   debug)
+    # Ad-hoc signed (identity "-"), not unsigned: UserNotifications
+    # refuses to register a completely unsigned bundle (UNErrorDomain
+    # Code=1 on requestAuthorization), so the queue-drained banner never
+    # fires in dev. Ad-hoc also applies the entitlements, making debug
+    # sandbox behaviour match release.
     xcodebuild \
       -project AudiobookForge.xcodeproj \
       -scheme AudiobookForge \
       -configuration Debug \
       -derivedDataPath "$DERIVED" \
       CODE_SIGN_IDENTITY="-" \
-      CODE_SIGNING_REQUIRED=NO \
-      CODE_SIGNING_ALLOWED=NO \
+      CODE_SIGNING_REQUIRED=YES \
+      CODE_SIGNING_ALLOWED=YES \
       build
     APP="$DERIVED/Build/Products/Debug/AudiobookForge.app"
     echo

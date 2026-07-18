@@ -34,6 +34,7 @@ struct QueuePanelView: View {
             Spacer()
             if queue.items.contains(where: \.status.isFinished) {
                 Button("Clear Done") { queue.clearFinished() }
+                    .accessibilityIdentifier("queue.clearDone")
                     .buttonStyle(.borderless)
                     .controlSize(.small)
                     .foregroundStyle(.secondary)
@@ -95,6 +96,7 @@ private struct QueueRow: View {
                     }
                     Spacer(minLength: 0)
                     Badge(text: item.status.label, color: item.status.tint)
+                        .accessibilityIdentifier("queue.item.status")
                 }
 
                 if item.status.isRunning {
@@ -131,6 +133,8 @@ private struct QueueRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 0.5)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("queue.item")
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
         .confirmationDialog(
@@ -209,6 +213,7 @@ private struct QueueRow: View {
                 .labelStyle(.titleAndIcon)
                 .font(.caption)
         }
+        .accessibilityIdentifier("queue.item.\(label.lowercased())")
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
     }

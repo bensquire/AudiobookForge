@@ -67,6 +67,57 @@ final class ChapterBuilderTests: XCTestCase {
         XCTAssertTrue(text.contains("genre=Audiobook\n"))
     }
 
+    func test_ffmetadata_marksFileAsAudiobook() {
+        // Arrange
+        var meta = BookMetadata()
+        meta.title = "x"
+        meta.author = "y"
+
+        // Act
+        let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
+
+        // Assert — media_type=2 becomes the mp4 `stik` atom that makes
+        // Apple Books / iTunes treat the file as an audiobook.
+        XCTAssertTrue(text.contains("media_type=2\n"))
+    }
+
+    func test_ffmetadata_seriesRidesOnAtomsTheMP4MuxerActuallyWrites() {
+        // Arrange — ffmpeg's mp4 muxer drops unknown keys (the old
+        // TXXX:* tags never reached the file), so series must ride on
+        // `show`/`episode_sort`/`grouping`.
+        var meta = BookMetadata()
+        meta.title = "x"
+        meta.author = "y"
+        meta.series = "Dune Saga"
+        meta.seriesPosition = "3"
+
+        // Act
+        let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
+
+        // Assert
+        XCTAssertTrue(text.contains("show=Dune Saga\n"))
+        XCTAssertTrue(text.contains("episode_sort=3\n"))
+        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3\n"))
+        XCTAssertFalse(text.contains("TXXX"))
+    }
+
+    func test_ffmetadata_nonIntegerSeriesPositionSkipsEpisodeSort() {
+        // Arrange — "3.5" novellas are common; `tves` is an integer atom
+        // so a fractional position must not be written there.
+        var meta = BookMetadata()
+        meta.title = "x"
+        meta.author = "y"
+        meta.series = "Dune Saga"
+        meta.seriesPosition = "3.5"
+
+        // Act
+        let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
+
+        // Assert — grouping still carries the human-readable form
+        XCTAssertFalse(text.contains("episode_sort="))
+        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3.5\n"))
+    }
+
     func test_ffmetadata_chaptersCarryConsecutiveMillisecondRanges() {
         // Arrange — two 1500 ms chapters
         let chapters = [

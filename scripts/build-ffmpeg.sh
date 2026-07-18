@@ -105,7 +105,7 @@ cd "ffmpeg-$FFMPEG_VERSION"
   --pkg-config-flags="--static" \
   --disable-autodetect \
   --disable-everything \
-  --enable-decoder=aac,mp3,alac,flac,opus,vorbis,mjpeg \
+  --enable-decoder=aac,mp3,alac,flac,opus,vorbis,mjpeg,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_u8,pcm_alaw,pcm_mulaw \
   --enable-encoder=aac,libfdk_aac,mjpeg,pcm_s16le \
   --enable-demuxer=mp3,mov,aac,flac,ogg,wav,image2,concat,matroska,ffmetadata \
   --enable-muxer=mp4,ipod,null \

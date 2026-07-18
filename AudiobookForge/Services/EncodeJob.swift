@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import os
 
 /// Value-typed description of one encode job. Decoupling this from the live
@@ -23,23 +24,12 @@ final class EncodeJob {
     let spec: EncodeSpec
     let cancelToken = CancelToken()
 
-    /// Per-chunk cancel tokens for the parallel-encode phase. The job's
-    /// top-level `cancelToken` fans cancellation out to all of them so a
-    /// user-initiated cancel reliably reaches every in-flight ffmpeg.
-    private var childTokens: [CancelToken] = []
-
     /// `frac` is 0…1. `status` is a short human-readable label like
     /// "Encoding chapter 3/12…" or "Remuxing (no re-encode)…".
     var onProgress: (Double, String) -> Void = { _, _ in }
 
     init(spec: EncodeSpec) {
         self.spec = spec
-        cancelToken.setOnCancel { [weak self] in
-            // Hop to MainActor — childTokens is actor-isolated state.
-            Task { @MainActor [weak self] in
-                self?.childTokens.forEach { $0.cancel() }
-            }
-        }
     }
 
     /// Runs the encode. Returns the URL the file was actually written to
@@ -52,6 +42,10 @@ final class EncodeJob {
     }
 
     private func runInner() async throws -> URL {
+        // Don't waste preflight work (disk-space stat, directory
+        // creation) on a job that was cancelled while queued.
+        if cancelToken.isCancelled { throw FFmpegRunner.RunError.cancelled }
+
         // Defensive: re-resolve in case another finished item dropped a
         // file at this path between enqueue and now.
         let finalURL = OutputPathResolver.uniqueURL(for: spec.outputURL)
@@ -62,6 +56,19 @@ final class EncodeJob {
             )
         } catch {
             throw EncodeError.outputUnavailable(parent.path, error.localizedDescription)
+        }
+
+        // Fail fast on a full disk instead of surfacing a cryptic ffmpeg
+        // write error 45 minutes into a long encode.
+        let required = Self.estimatedRequiredBytes(
+            chapters: spec.chapters, settings: spec.settings
+        )
+        if let available = try? parent.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        ).volumeAvailableCapacityForImportantUsage,
+            available < required
+        {
+            throw EncodeError.insufficientDiskSpace(required: required, available: available)
         }
 
         // Encode to a sibling `.partial` then rename — if we crash or get
@@ -83,6 +90,13 @@ final class EncodeJob {
 
         var coverURL: URL?
         if let coverData = spec.metadata.coverData {
+            // The bytes may have come from a remote metadata API. Refuse
+            // anything ImageIO can't identify as an image before handing
+            // it to ffmpeg's decoders — smaller parsing surface, and the
+            // user gets a clear error instead of an ffmpeg stderr dump.
+            guard Self.isDecodableImage(coverData) else {
+                throw EncodeError.invalidCoverImage
+            }
             let url = workDir.appendingPathComponent("cover.jpg")
             try coverData.write(to: url)
             coverURL = url
@@ -264,8 +278,9 @@ final class EncodeJob {
 
         // Pre-allocate per-chunk tokens so cancel() lands even if a task
         // hasn't started yet (it'll throw .cancelled on first acquire()).
-        let tokens = (0 ..< totalChapters).map { _ in CancelToken() }
-        childTokens = tokens
+        // makeChild ties each to the parent at birth — a child created
+        // after the parent was cancelled is born cancelled.
+        let tokens = (0 ..< totalChapters).map { _ in cancelToken.makeChild() }
 
         // Phase 0 — resolve the gain filter for this encode. Manual
         // boost is a simple synthesis from the picked dB value; auto-
@@ -565,6 +580,9 @@ final class EncodeJob {
         // samples and `-c:a copy` at the same time.
         guard settings.gainBoost == .off else { return false }
         guard let first = chapters.first, first.codec.isMP4RemuxFriendly else { return false }
+        // Codec equality also covers AAC profile: CoreMedia reports LC,
+        // HE, and HEv2 as distinct FourCCs, so a mixed-profile book can
+        // never sneak through as "uniform AAC".
         return chapters.dropFirst().allSatisfy {
             $0.codec == first.codec
                 && $0.sampleRate == first.sampleRate
@@ -572,21 +590,46 @@ final class EncodeJob {
         }
     }
 
-    nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
-        switch settings.bitrate {
-        case .source:
-            let total = chapters.reduce(0.0) { $0 + $1.duration }
-            let weighted = chapters.reduce(0.0) {
-                $0 + Double($1.sourceBitrate) * $1.duration
-            }
-            guard total > 0, weighted > 0 else { return "64k" }
-            let avgKbps = Int((weighted / total / 1000).rounded())
-            let steps = [32, 48, 64, 80, 96, 112, 128, 160, 192, 256, 320]
-            let snapped = steps.min(by: { abs($0 - avgKbps) < abs($1 - avgKbps) }) ?? 64
-            return "\(snapped)k"
-        default:
-            return settings.bitrate.rawValue
+    /// True when ImageIO can identify `data` as an image with at least
+    /// one frame. Used to vet remote cover bytes before ffmpeg sees them.
+    nonisolated static func isDecodableImage(_ data: Data) -> Bool {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return false
         }
+        return CGImageSourceGetCount(source) > 0
+    }
+
+    /// Rough upper bound on the bytes an encode will write. The re-encode
+    /// path stores per-chapter intermediates AND the final concat before
+    /// the partial-file rename, so it needs ~2× the payload; remux writes
+    /// the payload once. Both get headroom for container overhead.
+    nonisolated static func estimatedRequiredBytes(
+        chapters: [Chapter], settings: EncodeSettings
+    ) -> Int64 {
+        let kbps = resolveBitrateKbps(chapters: chapters, settings: settings)
+        let totalSeconds = chapters.reduce(0.0) { $0 + $1.duration }
+        let payloadBytes = totalSeconds * Double(kbps) * 1000 / 8
+        let factor = canRemux(chapters: chapters, settings: settings) ? 1.2 : 2.4
+        return Int64((payloadBytes * factor).rounded(.up))
+    }
+
+    nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
+        "\(resolveBitrateKbps(chapters: chapters, settings: settings))k"
+    }
+
+    /// The typed value behind `resolveBitrate` — ffmpeg's "64k" spelling
+    /// is applied only at the argument boundary so numeric consumers
+    /// (disk-space estimate) don't have to reverse-parse it.
+    nonisolated static func resolveBitrateKbps(chapters: [Chapter], settings: EncodeSettings) -> Int {
+        if let fixed = settings.bitrate.kbps { return fixed }
+        let total = chapters.reduce(0.0) { $0 + $1.duration }
+        let weighted = chapters.reduce(0.0) {
+            $0 + Double($1.sourceBitrate) * $1.duration
+        }
+        guard total > 0, weighted > 0 else { return 64 }
+        let avgKbps = Int((weighted / total / 1000).rounded())
+        let steps = [32, 48, 64, 80, 96, 112, 128, 160, 192, 256, 320]
+        return steps.min(by: { abs($0 - avgKbps) < abs($1 - avgKbps) }) ?? 64
     }
 
     /// Apply the user's `filenameTemplate` to a base directory and metadata.
@@ -612,26 +655,5 @@ final class EncodeJob {
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
         return s.components(separatedBy: illegal).joined(separator: "_")
             .trimmingCharacters(in: .whitespaces)
-    }
-}
-
-enum EncodeError: LocalizedError {
-    case missingSourceFile(URL)
-    case sourceChanged(URL)
-    case outputUnavailable(String, String)
-    case noOutputDir
-
-    var errorDescription: String? {
-        switch self {
-        case let .missingSourceFile(url):
-            "Source file no longer found: \(url.lastPathComponent). "
-                + "Move it back to \(url.deletingLastPathComponent().path) or remove this queue item."
-        case let .sourceChanged(url):
-            "Source file changed since it was queued: \(url.lastPathComponent). Remove and re-add this item to refresh it."
-        case let .outputUnavailable(path, why):
-            "Output folder is no longer available (\(path)): \(why). Choose a new output folder and retry."
-        case .noOutputDir:
-            "No output folder selected."
-        }
     }
 }

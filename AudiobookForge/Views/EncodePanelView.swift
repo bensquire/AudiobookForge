@@ -20,20 +20,33 @@ struct EncodePanelView: View {
         @Bindable var project = project
 
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            // Labels sit outside the pickers (labelsHidden) so "Bitrate"
+            // starts at the row's leading edge, aligned with "Output:"
+            // below — a Picker's built-in label right-aligns inside a
+            // fixed frame.
+            HStack(spacing: 8) {
+                Text("Bitrate")
+                    .foregroundStyle(.secondary)
                 Picker("Bitrate", selection: $project.settings.bitrate) {
                     ForEach(EncodeSettings.Bitrate.allCases) { b in
                         Text(b.label).tag(b)
                     }
                 }
-                .frame(width: 200)
+                .labelsHidden()
+                .accessibilityIdentifier("encode.bitrate")
+                .frame(width: 140)
 
+                Text("Gain")
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 12)
                 Picker("Gain", selection: $project.settings.gainBoost) {
                     ForEach(EncodeSettings.GainBoost.allCases) { g in
                         Text(g.label).tag(g)
                     }
                 }
-                .frame(width: 200)
+                .labelsHidden()
+                .accessibilityIdentifier("encode.gain")
+                .frame(width: 140)
 
                 Spacer()
             }
@@ -48,7 +61,9 @@ struct EncodePanelView: View {
             }
 
             HStack {
-                if let name = plannedOutputName {
+                // Gate on canEnqueue so the empty prep area doesn't show a
+                // meaningless "Will save as .m4b" built from blank metadata.
+                if let name = plannedOutputName, project.canEnqueue {
                     Label("Will save as \(name)", systemImage: "doc.badge.arrow.up")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -68,6 +83,13 @@ struct EncodePanelView: View {
         .onChange(of: project.settings.outputDirectory) { _, _ in refreshPlannedOutput() }
         .onChange(of: project.settings.filenameTemplate) { _, _ in refreshPlannedOutput() }
         .onChange(of: queue.items.count) { _, _ in refreshPlannedOutput() }
+        // A finishing item leaves the count unchanged but just dropped a
+        // file at (possibly) the planned path — refresh the collision hint.
+        // (lazy: this expression re-evaluates on every progress tick, so
+        // don't build a throwaway array each time.)
+        .onChange(of: queue.items.lazy.filter(\.status.isFinished).count) { _, _ in
+            refreshPlannedOutput()
+        }
     }
 
     /// Labelled row. The label flips between the generic "Output folder"
@@ -92,6 +114,7 @@ struct EncodePanelView: View {
                         .truncationMode(.middle)
                 }
             }
+            .accessibilityIdentifier("encode.chooseOutput")
             .help(dir?.path ?? "")
             Spacer(minLength: 12)
             if let format = outputFormatLabel {
@@ -107,12 +130,16 @@ struct EncodePanelView: View {
 
     private var enqueueButton: some View {
         Button {
-            _ = queue.enqueue(from: project)
+            // Only clear the prep area if the enqueue actually happened —
+            // a nil return (e.g. output dir vanished since the last
+            // render) must not discard the user's draft.
+            guard queue.enqueue(from: project) != nil else { return }
             project.reset()
         } label: {
             Label("Add to Queue", systemImage: "plus.rectangle.on.rectangle")
                 .frame(minWidth: 140)
         }
+        .accessibilityIdentifier("encode.addToQueue")
         .controlSize(.large)
         .keyboardShortcut(.return, modifiers: [.command])
         .disabled(!project.canEnqueue)

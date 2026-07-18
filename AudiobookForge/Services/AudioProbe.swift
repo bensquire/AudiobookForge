@@ -28,7 +28,7 @@ enum AudioProbe {
         async let durationCM = try? asset.load(.duration)
         async let meta = try? asset.load(.commonMetadata)
         async let id3 = try? asset.loadMetadata(for: .id3Metadata)
-        async let ffmpegBR = ffmpegStreamBitrate(url)
+        async let ffmpegBitrate = ffmpegStreamBitrate(url)
 
         var probed = Probed(duration: 0)
 
@@ -45,7 +45,7 @@ enum AudioProbe {
             // Prefer ffmpeg — see file header for why. Fall back to
             // AVFoundation's estimate when ffmpeg can't determine it
             // (e.g. bundled binary missing in a dev build).
-            if let ff = await ffmpegBR {
+            if let ff = await ffmpegBitrate {
                 probed.bitrate = ff
             } else if let rate = try? await audio.load(.estimatedDataRate),
                       rate.isFinite, rate > 0
@@ -88,18 +88,19 @@ enum AudioProbe {
         return probed
     }
 
-    /// Audio-stream bitrate (bits/sec) as reported by ffmpeg's banner.
-    /// `-t 1` caps the demux to one second of stream — the banner is
-    /// printed at startup so we get the same numbers as a full read
-    /// for ~14× less wall time (~20 ms vs ~280 ms on a 90-min MP3).
+    /// The audio stream's codec-context bitrate, read from ffmpeg's
+    /// startup banner (stderr). `-t 1` caps the demux to one second of
+    /// stream — the banner is printed at startup so we get the same
+    /// number as a full read for ~14× less wall time (~20 ms vs ~280 ms
+    /// on a 90-min MP3).
     private static func ffmpegStreamBitrate(_ url: URL) async -> Int? {
-        guard let stderr = await FFmpegRunner.captureStderr(arguments: [
+        let stderr = await FFmpegRunner.captureStderr(arguments: [
             "-i", url.path,
             "-t", "1",
             "-c", "copy",
             "-f", "null", "-"
-        ]) else { return nil }
-        return parseBitrateFromFFmpegBanner(stderr)
+        ])
+        return stderr.flatMap(parseBitrateFromFFmpegBanner)
     }
 
     private static let kbpsPattern = /(\d+)\s*kb\/s/

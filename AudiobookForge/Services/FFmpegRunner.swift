@@ -7,12 +7,15 @@ import Foundation
 enum FFmpegRunner {
     enum RunError: Error, LocalizedError {
         case notFound
+        case spawnFailed(String)
         case nonZeroExit(Int32, String)
         case cancelled
 
         var errorDescription: String? {
             switch self {
             case .notFound: "ffmpeg binary not found"
+            case let .spawnFailed(reason):
+                "Couldn't launch the bundled ffmpeg: \(reason)"
             case let .nonZeroExit(code, tail):
                 "ffmpeg exited with code \(code)\n\n…\(tail)"
             case .cancelled: "Cancelled"
@@ -29,6 +32,9 @@ enum FFmpegRunner {
         cancelToken: CancelToken = .init()
     ) async throws -> String {
         guard let ffmpeg = Bundled.binary("ffmpeg") else { throw RunError.notFound }
+        // A cancel (token or Task) that lands before we spawn means the
+        // caller no longer wants the result — don't launch at all.
+        if cancelToken.isCancelled || Task.isCancelled { throw RunError.cancelled }
 
         let process = Process()
         process.executableURL = ffmpeg
@@ -55,19 +61,26 @@ enum FFmpegRunner {
             }
         }
 
-        // Set up termination → continuation BEFORE run() so we can't miss it.
-        let exitStatus: Int32 = await withCheckedContinuation { cont in
-            process.terminationHandler = { proc in
-                cont.resume(returning: proc.terminationStatus)
+        // Swift Task cancellation folds into the shared token so that a
+        // failing sibling in a task group (which cancels this task) also
+        // terminates our ffmpeg child instead of letting it run to the end.
+        let exitStatus: Int32 = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { cont in
+                // Termination → continuation is wired BEFORE run() so we
+                // can't miss an instant exit.
+                process.terminationHandler = { proc in
+                    cont.resume(returning: proc.terminationStatus)
+                }
+                do {
+                    try process.run()
+                } catch {
+                    cont.resume(throwing: RunError.spawnFailed(error.localizedDescription))
+                    return
+                }
+                Self.armKill(cancelToken, process)
             }
-            cancelToken.setOnCancel { [weak process] in
-                process?.terminate()
-            }
-            do {
-                try process.run()
-            } catch {
-                cont.resume(returning: -1)
-            }
+        } onCancel: {
+            cancelToken.cancel()
         }
 
         // Drain any tail bytes ffmpeg flushed just before exit.
@@ -99,6 +112,7 @@ enum FFmpegRunner {
         cancelToken: CancelToken = .init()
     ) async -> String? {
         guard let ffmpeg = Bundled.binary("ffmpeg") else { return nil }
+        if cancelToken.isCancelled { return nil }
 
         let process = Process()
         process.executableURL = ffmpeg
@@ -127,15 +141,26 @@ enum FFmpegRunner {
                 if !remaining.isEmpty { buffer.append(remaining) }
                 cont.resume(returning: buffer.text())
             }
-            cancelToken.setOnCancel { [weak process] in
-                process?.terminate()
-            }
             do {
                 try process.run()
             } catch {
                 stderr.fileHandleForReading.readabilityHandler = nil
                 cont.resume(returning: nil)
+                return
             }
+            Self.armKill(cancelToken, process)
+        }
+    }
+
+    /// Register `process.terminate()` on the token. Must be called only
+    /// AFTER a successful `process.run()` — `terminate()` on a
+    /// never-launched Process raises an ObjC exception. `setOnCancel`
+    /// fires the handler immediately if the token was cancelled while
+    /// we were spawning, so the gap is covered.
+    private static func armKill(_ token: CancelToken, _ process: Process) {
+        token.setOnCancel { [weak process] in
+            guard let process, process.isRunning else { return }
+            process.terminate()
         }
     }
 
@@ -173,6 +198,16 @@ final class CancelToken: @unchecked Sendable {
     var isCancelled: Bool {
         lock.lock(); defer { lock.unlock() }
         return _isCancelled
+    }
+
+    /// A token that cancels when this one does. A child created after
+    /// the parent was already cancelled is born cancelled (`setOnCancel`
+    /// fires immediately), which closes the "cancel landed before the
+    /// child existed" race in one place instead of per call site.
+    func makeChild() -> CancelToken {
+        let child = CancelToken()
+        setOnCancel { child.cancel() }
+        return child
     }
 
     func setOnCancel(_ handler: @escaping () -> Void) {

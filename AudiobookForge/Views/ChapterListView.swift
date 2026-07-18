@@ -67,6 +67,7 @@ struct ChapterListView: View {
             TableColumn("Title") { chap in
                 TextField("", text: titleBinding(for: chap.id))
                     .textFieldStyle(.plain)
+                    .accessibilityIdentifier("chapters.rowTitle")
             }
 
             TableColumn("Duration") { chap in
@@ -84,6 +85,7 @@ struct ChapterListView: View {
             }
         }
         .onDeleteCommand(perform: deleteSelected)
+        .accessibilityIdentifier("chapters.table")
     }
 
     private var header: some View {
@@ -105,6 +107,7 @@ struct ChapterListView: View {
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }
+                .accessibilityIdentifier("chapters.clear")
                 .controlSize(.small)
                 .help("Discard the current book and start over")
             }
@@ -113,6 +116,7 @@ struct ChapterListView: View {
             } label: {
                 Label("Add Files…", systemImage: "plus")
             }
+            .accessibilityIdentifier("chapters.addFiles")
             .controlSize(.small)
         }
         .padding(10)
@@ -145,6 +149,7 @@ struct ChapterListView: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
             Button("Choose Files…") { isImporting = true }
+                .accessibilityIdentifier("chapters.chooseFiles")
                 .controlSize(.large)
                 .padding(.top, 8)
         }
@@ -183,6 +188,7 @@ struct ChapterListView: View {
             SecurityScope.retain(url)
         }
 
+        let existingPaths = Set(project.chapters.map(\.sourceURL.standardizedFileURL.path))
         let files = await Task.detached(priority: .userInitiated) { () -> [URL] in
             var results: [URL] = []
             for url in urls {
@@ -191,8 +197,14 @@ struct ChapterListView: View {
                 if isDir.boolValue {
                     // Use NSDirectoryEnumerator.allObjects — the for-in
                     // form trips a Swift 6 `makeIterator` warning in
-                    // async contexts.
-                    let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil)
+                    // async contexts. skipsHiddenFiles keeps AppleDouble
+                    // sidecars ("._Chapter 01.mp3" on FAT/exFAT drives)
+                    // from becoming zero-duration junk chapters.
+                    let walker = FileManager.default.enumerator(
+                        at: url,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    )
                     let all = walker?.allObjects.compactMap { $0 as? URL } ?? []
                     results.append(contentsOf: all.filter(isAudio))
                 } else if isAudio(url) {
@@ -204,7 +216,9 @@ struct ChapterListView: View {
                 .sort {
                     $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
                 }
-            return results
+            // Same file dropped twice (or already in the chapter list)
+            // shouldn't become a duplicate chapter.
+            return ChapterImport.dedupe(results, existingPaths: existingPaths)
         }.value
 
         // Probe concurrently — serial awaits stall drag-drop on long books.

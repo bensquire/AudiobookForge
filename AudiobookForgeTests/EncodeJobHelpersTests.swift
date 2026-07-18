@@ -77,6 +77,97 @@ final class EncodeJobHelpersTests: XCTestCase {
         XCTAssertFalse(EncodeJob.canRemux(chapters: [], settings: EncodeSettings()))
     }
 
+    func test_canRemux_falseForMixedAACProfiles() {
+        // Arrange — LC and HE-AAC probe as distinct codecs; their
+        // bitstreams can't be joined with `-c:a copy`.
+        var he = aacChapter()
+        he.codec = .aacHE
+
+        // Act
+        let canRemux = EncodeJob.canRemux(
+            chapters: [aacChapter(), he], settings: EncodeSettings()
+        )
+
+        // Assert
+        XCTAssertFalse(canRemux)
+    }
+
+    func test_canRemux_trueForUniformHEAAC() {
+        // Arrange — all chapters HE-AAC with matching params
+        var first = aacChapter(); first.codec = .aacHE
+        var second = aacChapter(); second.codec = .aacHE
+
+        // Act
+        let canRemux = EncodeJob.canRemux(
+            chapters: [first, second], settings: EncodeSettings()
+        )
+
+        // Assert — a uniform HE book gets the lossless fast path
+        XCTAssertTrue(canRemux)
+    }
+
+    // MARK: - estimatedRequiredBytes
+
+    func test_estimatedRequiredBytes_scalesWithDurationAndBitrate() {
+        // Arrange — 1000 s at 128 kbps = 16 MB of payload; the re-encode
+        // path (forced by the explicit bitrate) doubles that for the
+        // intermediates plus container headroom.
+        var ch = aacChapter()
+        ch.duration = 1000
+        var settings = EncodeSettings()
+        settings.bitrate = .k128
+
+        // Act
+        let bytes = EncodeJob.estimatedRequiredBytes(chapters: [ch], settings: settings)
+
+        // Assert — 16 MB payload; estimate must cover payload×2 but stay
+        // within an order of magnitude (it's a preflight, not an invoice).
+        XCTAssertGreaterThan(bytes, 32_000_000)
+        XCTAssertLessThan(bytes, 64_000_000)
+    }
+
+    func test_estimatedRequiredBytes_remuxPathNeedsLessHeadroom() {
+        // Arrange — identical chapters; one settings remuxes (source
+        // bitrate, no gain), the other re-encodes (explicit bitrate).
+        var ch = aacChapter()
+        ch.duration = 1000
+        ch.sourceBitrate = 128_000
+        var reencode = EncodeSettings()
+        reencode.bitrate = .k128
+
+        // Act
+        let remuxBytes = EncodeJob.estimatedRequiredBytes(
+            chapters: [ch], settings: EncodeSettings()
+        )
+        let reencodeBytes = EncodeJob.estimatedRequiredBytes(
+            chapters: [ch], settings: reencode
+        )
+
+        // Assert — remux writes the payload once, re-encode twice.
+        XCTAssertLessThan(remuxBytes, reencodeBytes)
+    }
+
+    // MARK: - isDecodableImage
+
+    func test_isDecodableImage_acceptsRealPNG() throws {
+        // Arrange — 1×1 red PNG
+        let png = try XCTUnwrap(Data(
+            base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+        ))
+
+        // Act / Assert
+        XCTAssertTrue(EncodeJob.isDecodableImage(png))
+    }
+
+    func test_isDecodableImage_rejectsGarbageBytes() {
+        // Arrange — plausible-length junk that is not any image format
+        let junk = Data(repeating: 0x42, count: 4096)
+
+        // Act / Assert
+        XCTAssertFalse(EncodeJob.isDecodableImage(junk))
+        XCTAssertFalse(EncodeJob.isDecodableImage(Data()))
+    }
+
     // MARK: - resolveBitrate
 
     func test_resolveBitrate_specificValuePassesThrough() {

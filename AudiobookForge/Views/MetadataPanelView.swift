@@ -22,22 +22,23 @@ struct MetadataPanelView: View {
                 searchSection
                 Divider()
 
-                field("Title", text: $project.metadata.title)
-                field("Subtitle", text: $project.metadata.subtitle)
-                field("Author", text: $project.metadata.author)
-                field("Narrator", text: $project.metadata.narrator)
+                field("Title", id: "title", text: $project.metadata.title)
+                field("Subtitle", id: "subtitle", text: $project.metadata.subtitle)
+                field("Author", id: "author", text: $project.metadata.author)
+                field("Narrator", id: "narrator", text: $project.metadata.narrator)
                 HStack {
-                    field("Series", text: $project.metadata.series)
-                    field("#", text: $project.metadata.seriesPosition)
+                    field("Series", id: "series", text: $project.metadata.series)
+                    field("#", id: "seriesPosition", text: $project.metadata.seriesPosition)
                         .frame(width: 70)
                 }
                 HStack {
-                    field("Year", text: $project.metadata.year).frame(width: 100)
-                    field("Genre", text: $project.metadata.genre)
+                    field("Year", id: "year", text: $project.metadata.year).frame(width: 100)
+                    field("Genre", id: "genre", text: $project.metadata.genre)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Description").font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $project.metadata.description)
+                        .accessibilityIdentifier("metadata.description")
                         .font(.body)
                         .frame(minHeight: 90)
                         .overlay(RoundedRectangle(cornerRadius: 6)
@@ -66,9 +67,11 @@ struct MetadataPanelView: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Button("Choose Cover…", action: chooseCover)
+                        .accessibilityIdentifier("metadata.chooseCover")
                         .controlSize(.small)
                     if project.metadata.coverData != nil {
                         Button("Clear") { project.metadata.coverData = nil }
+                            .accessibilityIdentifier("metadata.clearCover")
                             .controlSize(.small)
                     }
                 }
@@ -82,6 +85,7 @@ struct MetadataPanelView: View {
             HStack {
                 TextField("Search metadata…", text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("metadata.search")
                     .onSubmit(runSearch)
                 Picker("", selection: $providerRaw) {
                     ForEach(MetadataSearch.Provider.allCases) { p in
@@ -89,6 +93,7 @@ struct MetadataPanelView: View {
                     }
                 }
                 .labelsHidden()
+                .accessibilityIdentifier("metadata.provider")
                 .frame(width: 130)
                 Button(action: runSearch) {
                     if isSearching {
@@ -97,6 +102,7 @@ struct MetadataPanelView: View {
                         Image(systemName: "magnifyingglass")
                     }
                 }
+                .accessibilityIdentifier("metadata.runSearch")
                 .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || isSearching)
                 if !results.isEmpty || !searchQuery.isEmpty || searchError != nil {
                     Button {
@@ -105,6 +111,7 @@ struct MetadataPanelView: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.tertiary)
                     }
+                    .accessibilityIdentifier("metadata.clearSearch")
                     .buttonStyle(.plain)
                     .help("Clear search results")
                 }
@@ -123,10 +130,12 @@ struct MetadataPanelView: View {
         }
     }
 
-    private func field(_ label: String, text: Binding<String>) -> some View {
+    private func field(_ label: String, id: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.caption).foregroundStyle(.secondary)
-            TextField("", text: text).textFieldStyle(.roundedBorder)
+            TextField("", text: text)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("metadata.\(id)")
         }
     }
 
@@ -137,6 +146,10 @@ struct MetadataPanelView: View {
     }
 
     private func runSearch() {
+        // The search button disables itself while a search runs, but
+        // .onSubmit doesn't — guard so Enter-mashing can't race two
+        // searches writing `results` out of order.
+        guard !isSearching else { return }
         Task {
             isSearching = true
             searchError = nil
@@ -152,6 +165,11 @@ struct MetadataPanelView: View {
     }
 
     private func apply(_ result: MetadataSearchResult) {
+        // enrich + cover fetch take seconds; if the user resets or loads
+        // another queue item meanwhile, this result belongs to a book
+        // that's no longer in the prep area — drop it instead of writing
+        // stale metadata into the new draft.
+        let tokenAtRequest = project.resetToken
         Task {
             // Most providers already return the cover URL from search, so
             // start the cover download in parallel with the enrich call
@@ -176,6 +194,7 @@ struct MetadataPanelView: View {
             }
 
             await MainActor.run {
+                guard project.resetToken == tokenAtRequest else { return }
                 project.metadata.title = enriched.title
                 project.metadata.author = enriched.author
                 if let n = enriched.narrator { project.metadata.narrator = n }
@@ -230,6 +249,7 @@ private struct SearchResultRow: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+        .accessibilityIdentifier("metadata.searchResult")
         .buttonStyle(.plain)
     }
 }
