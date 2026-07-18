@@ -26,6 +26,10 @@
 --wrapparameters preserve
 --wraparguments preserve
 
+# SwiftFormat 0.62 enables these by default; one-line `if x { return }`
+# bodies are deliberate house style, so keep them opt-out.
+--disable wrapIfStatementBodies,wrapIfExpressionBodies
+
 # Strip lone-newline-at-end and trailing whitespace.
 --trimwhitespace always
 
