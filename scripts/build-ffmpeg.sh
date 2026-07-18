@@ -21,7 +21,7 @@ set -euo pipefail
 
 # ---- pinned versions -------------------------------------------------------
 
-FFMPEG_VERSION="7.1"
+FFMPEG_VERSION="8.1.2"
 FDK_AAC_VERSION="2.0.3"
 MACOS_MIN="14.0"
 
@@ -77,8 +77,11 @@ if [[ ! -f "$PREFIX/lib/libfdk-aac.a" ]]; then
   rm -rf "fdk-aac-$FDK_AAC_VERSION"
   tar xf "$tar_name"
   cd "fdk-aac-$FDK_AAC_VERSION"
+  # fdk-aac is C++ — without CXXFLAGS the .cpp objects silently build
+  # against the host SDK's default target instead of MACOS_MIN (ld then
+  # warns "built for newer macOS version than being linked").
   ./configure --prefix="$PREFIX" --disable-shared --enable-static \
-              CFLAGS="$CFLAGS" >/dev/null
+              CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" >/dev/null
   make -j"$(sysctl -n hw.activecpu)" >/dev/null
   make install >/dev/null
 fi
