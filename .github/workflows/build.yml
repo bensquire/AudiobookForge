@@ -47,6 +47,19 @@ jobs:
       - name: Build
         run: ./scripts/build.sh release
 
+      - name: Build forge CLI
+        run: |
+          xcodebuild \
+            -project AudiobookForge.xcodeproj \
+            -scheme ForgeCLI \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          build/Build/Products/Release/forge --version
+
       - name: Test
         run: |
           xcodebuild \

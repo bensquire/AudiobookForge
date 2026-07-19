@@ -73,6 +73,15 @@ final class EncodeJobIntegrationTests: XCTestCase {
         let hasChapters = await (probedOutput.hasChapters, probedSource.hasChapters)
         XCTAssertTrue(hasChapters.0)
         XCTAssertFalse(hasChapters.1)
+
+        // Chapters must ship in BOTH container formats: the QuickTime
+        // chap track (Apple players — proven above via AVFoundation)
+        // and the Nero chpl atom (ffmpeg-lineage players). ffmpeg's mov
+        // muxer writes both by default; a future flag change or ffmpeg
+        // bump silently dropping one would shrink player compatibility.
+        let bytes = try Data(contentsOf: outputURL)
+        XCTAssertTrue(bytes.contains(Data("chpl".utf8)),
+                      "output m4b lost its Nero chpl chapter atom")
     }
 
     // MARK: - remux path
@@ -105,6 +114,11 @@ final class EncodeJobIntegrationTests: XCTestCase {
         XCTAssertEqual(duration, 2.0, accuracy: 0.3)
         let chapterTitles = try await loadChapterTitles(asset)
         XCTAssertEqual(chapterTitles, ["One", "Two"])
+        // Both chapter styles on the remux path too — output format is a
+        // property of the writer, never of what the sources carried.
+        let bytes = try Data(contentsOf: outputURL)
+        XCTAssertTrue(bytes.contains(Data("chpl".utf8)),
+                      "remuxed m4b lost its Nero chpl chapter atom")
     }
 
     // MARK: - cancellation regressions

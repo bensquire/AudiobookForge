@@ -108,4 +108,38 @@ final class AudioProbeBitrateParseTests: XCTestCase {
         // Act / Assert
         XCTAssertEqual(AudioProbe.parseBitrateFromFFmpegBanner(banner), 32000)
     }
+
+    // MARK: - chapter count from banner
+
+    func test_chapterCount_countsChapterLines() {
+        // Arrange — shape captured from an Audible m4b whose chapters
+        // live in a Nero chpl atom (AVFoundation reports none of these).
+        let banner = """
+          Duration: 11:11:41.98, start: 0.000000, bitrate: 87 kb/s
+          Chapters:
+            Chapter #0:0: start 0.000000, end 21.000000
+              Metadata:
+                title           : Opening Credits
+            Chapter #0:1: start 21.000000, end 1183.000000
+              Metadata:
+                title           : Chapter 1
+          Stream #0:0[0x1](und): Audio: aac (mp4a / 0x6134706D), 44100 Hz, stereo
+        """
+
+        // Act / Assert
+        XCTAssertEqual(AudioProbe.parseChapterCount(fromBanner: banner), 2)
+    }
+
+    func test_chapterCount_zeroWhenNoChapters() {
+        // Arrange — a banner mentioning "Chapter" only inside a title tag
+        // must not count as a chapter marker.
+        let banner = """
+          Duration: 00:16:06.20, start: 0.000000, bitrate: 64 kb/s
+            title           : Chapter #10: The Thunder Child
+          Stream #0:0: Audio: mp3, 22050 Hz, mono, s16p, 64 kb/s
+        """
+
+        // Act / Assert
+        XCTAssertEqual(AudioProbe.parseChapterCount(fromBanner: banner), 0)
+    }
 }

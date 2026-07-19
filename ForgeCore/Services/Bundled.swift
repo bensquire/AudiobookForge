@@ -5,10 +5,12 @@ public enum Bundled {
     private static var cache: [String: URL?] = [:]
     private static var _overrideDirectory: URL?
 
-    /// Test hook: point binary resolution at an explicit directory (the
-    /// repo's Resources/bin) since unit tests run outside the app bundle.
-    /// Clears the memoisation cache so a mid-suite change takes effect.
-    static func setOverrideDirectory(_ url: URL?) {
+    /// Point binary resolution at an explicit directory. Used by unit
+    /// tests (which run outside the app bundle) and by the forge CLI
+    /// (which honours FORGE_FFMPEG_DIR — a bare tool has no bundle to
+    /// resolve from). Clears the memoisation cache so a mid-suite
+    /// change takes effect.
+    public static func setOverrideDirectory(_ url: URL?) {
         lock.lock(); defer { lock.unlock() }
         _overrideDirectory = url
         cache.removeAll()

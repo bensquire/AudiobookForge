@@ -34,14 +34,10 @@ public enum AudioProbe {
         async let meta = try? asset.load(.commonMetadata)
         async let id3 = try? asset.loadMetadata(for: .id3Metadata)
         async let ffmpegBitrate = ffmpegStreamBitrate(url)
-        // A non-empty chapter-locale list already proves chapters exist —
-        // loading the actual metadata groups would read every chapter
-        // title out of the sample data, which is wasted I/O per imported
-        // file (imports can be hundreds of files on a network volume).
-        async let chapterLocales = try? asset.load(.availableChapterLocales)
+        async let chapters = hasEmbeddedChapters(url)
 
         var probed = Probed(duration: 0)
-        probed.hasChapters = await (chapterLocales)?.isEmpty == false
+        probed.hasChapters = await chapters
 
         if let cm = await durationCM {
             probed.duration = CMTimeGetSeconds(cm)
@@ -97,6 +93,52 @@ public enum AudioProbe {
         }
 
         return probed
+    }
+
+    /// How a file's embedded chapters are stored. `chap` (QuickTime
+    /// chapter track) is what Apple players read; `chpl` (Nero atom) is
+    /// readable by ffmpeg-lineage players but invisible to AVFoundation.
+    /// Our own encoder always writes both; inherited files vary.
+    public enum ChapterFormat: String, Codable, Sendable {
+        case chap
+        case chpl
+        case none
+    }
+
+    /// Chapters-only probe. AVFoundation first (one metadata read, no
+    /// subprocess) — but it only sees QuickTime `chap` track chapters.
+    /// Many m4bs in the wild carry Nero-style `chpl` atoms instead
+    /// (AVFoundation reports none; ffmpeg reads them fine), so a file
+    /// that looks chapterless gets a second opinion from the ffmpeg
+    /// banner before we conclude anything.
+    public static func chapterFormat(_ url: URL) async -> ChapterFormat {
+        let asset = AVURLAsset(url: url)
+        if let locales = try? await asset.load(.availableChapterLocales),
+           !locales.isEmpty
+        {
+            return .chap
+        }
+        // Only mp4-family files can hide chpl chapters worth the spawn;
+        // for mp3 etc. the AVFoundation answer stands.
+        guard ["m4a", "m4b", "aac", "mp4"].contains(url.pathExtension.lowercased()) else {
+            return .none
+        }
+        guard let stderr = await FFmpegRunner.captureStderr(arguments: ["-i", url.path]) else {
+            return .none
+        }
+        return parseChapterCount(fromBanner: stderr) > 0 ? .chpl : .none
+    }
+
+    public static func hasEmbeddedChapters(_ url: URL) async -> Bool {
+        await chapterFormat(url) != .none
+    }
+
+    /// Count `Chapter #N:M:` entries in an ffmpeg input banner. Internal
+    /// so tests can pin it against captured output.
+    static func parseChapterCount(fromBanner stderr: String) -> Int {
+        stderr.split(separator: "\n").count { line in
+            line.trimmingCharacters(in: .whitespaces).hasPrefix("Chapter #")
+        }
     }
 
     /// The audio stream's codec-context bitrate, read from ffmpeg's

@@ -15,10 +15,19 @@ settings:
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
 
+packages:
+  ArgumentParser:
+    url: https://github.com/apple/swift-argument-parser
+    from: 1.3.0
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: 5.1.0
+
 targets:
   # Headless core: probing, import rules, metadata, encoding, queue.
-  # Shared by the GUI app and (from Phase 2 of the pipeline plan) the
-  # forge CLI. No AppKit/SwiftUI in here.
+  # Shared by the GUI app and the forge CLI. No AppKit/SwiftUI in here.
+  # Static so the CLI links it into a single relocatable binary — no
+  # framework-embedding for a command-line tool.
   ForgeCore:
     type: framework
     platform: macOS
@@ -30,6 +39,26 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.bensquire.ForgeCore
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_EMIT_LOC_STRINGS: NO
+        MACH_O_TYPE: staticlib
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
+
+  # Batch pipeline CLI: scan (classify the library) now; plan/run/verify
+  # in later phases. See the pipeline plan in .claude + memory.
+  ForgeCLI:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ForgeCLI
+    dependencies:
+      - target: ForgeCore
+      - package: ArgumentParser
+      - package: Yams
+    settings:
+      base:
+        PRODUCT_NAME: forge
+        SWIFT_EMIT_LOC_STRINGS: NO
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO
 
@@ -38,8 +67,10 @@ targets:
     platform: macOS
     deploymentTarget: "14.0"
     dependencies:
+      # embed:false — ForgeCore is a static archive, its code links
+      # directly into each consumer.
       - target: ForgeCore
-        embed: true
+        embed: false
     sources:
       - path: AudiobookForge
         excludes:
