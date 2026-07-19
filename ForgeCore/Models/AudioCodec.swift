@@ -5,7 +5,7 @@ import Foundation
 /// `'aac '` (with trailing space) — comparing against the raw string is
 /// fragile; an enum gives us safety and a place to hang
 /// codec-specific decisions (e.g. "is this MP4-compatible for remux").
-enum AudioCodec: Hashable {
+public enum AudioCodec: Hashable {
     case aac
     case aacHE
     case aacHEv2
@@ -17,7 +17,7 @@ enum AudioCodec: Hashable {
     case pcm
     case unknown(String)
 
-    init(fourCC: FourCharCode) {
+    public init(fourCC: FourCharCode) {
         let bytes: [UInt8] = [
             UInt8((fourCC >> 24) & 0xFF),
             UInt8((fourCC >> 16) & 0xFF),
@@ -50,7 +50,7 @@ enum AudioCodec: Hashable {
     /// supported family — MP3 is legal in MP4 but stumbles in some
     /// readers, so we keep it on the re-encode path. Mixing profiles is
     /// prevented by canRemux's codec-equality check, not here.
-    var isMP4RemuxFriendly: Bool {
+    public var isMP4RemuxFriendly: Bool {
         self == .aac || self == .aacHE || self == .aacHEv2
     }
 }

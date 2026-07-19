@@ -5,8 +5,8 @@ import Observation
 /// pending items serially. UI observes `items` directly.
 @MainActor
 @Observable
-final class QueueManager {
-    var items: [QueueItem] = []
+public final class QueueManager {
+    public var items: [QueueItem] = []
 
     private var running: (item: QueueItem, job: EncodeJob)?
     private var pumpWakeup: CheckedContinuation<Void, Never>?
@@ -24,17 +24,17 @@ final class QueueManager {
     /// Fired when the worker picks up the first item of a batch — the app
     /// layer uses this to request notification permission at a moment the
     /// user has clearly started long-running work.
-    var onBatchStarted: () -> Void = {}
+    public var onBatchStarted: () -> Void = {}
     /// Fired when the queue drains after processing ≥1 item, with the
     /// batch's succeeded/failed counts. Default no-op keeps unit tests
     /// free of UserNotifications (which needs a host app bundle).
-    var onBatchFinished: (_ succeeded: Int, _ failed: Int) -> Void = { _, _ in }
+    public var onBatchFinished: (_ succeeded: Int, _ failed: Int) -> Void = { _, _ in }
 
-    var isProcessing: Bool {
+    public var isProcessing: Bool {
         running != nil
     }
 
-    init() {
+    public init() {
         pumpTask = Task { @MainActor [weak self] in
             await self?.pumpLoop()
         }
@@ -49,7 +49,7 @@ final class QueueManager {
     /// What the queue *would* write to disk if the draft were enqueued
     /// right now. Shared by the live "Will save as…" hint and `enqueue` so
     /// the preview and reality can't diverge.
-    func plannedOutputURL(for draft: AudiobookProject) -> URL? {
+    public func plannedOutputURL(for draft: AudiobookProject) -> URL? {
         guard let outDir = draft.settings.outputDirectory else { return nil }
         let desired = EncodeJob.resolveOutputURL(
             in: outDir,
@@ -61,7 +61,7 @@ final class QueueManager {
     }
 
     @discardableResult
-    func enqueue(from draft: AudiobookProject) -> QueueItem? {
+    public func enqueue(from draft: AudiobookProject) -> QueueItem? {
         guard draft.canEnqueue, let outURL = plannedOutputURL(for: draft) else {
             return nil
         }
@@ -86,7 +86,7 @@ final class QueueManager {
         return item
     }
 
-    func cancel(_ item: QueueItem) {
+    public func cancel(_ item: QueueItem) {
         if item.id == running?.item.id {
             running?.job.cancelToken.cancel()
         } else if item.status.isPending {
@@ -94,7 +94,7 @@ final class QueueManager {
         }
     }
 
-    func remove(_ item: QueueItem) {
+    public func remove(_ item: QueueItem) {
         if item.id == running?.item.id {
             cancel(item)
             return
@@ -104,7 +104,7 @@ final class QueueManager {
 
     /// Move a finished item back into the queue. Output path is re-deduped
     /// so a retry doesn't clobber a previous successful sibling.
-    func retry(_ item: QueueItem) {
+    public func retry(_ item: QueueItem) {
         guard item.status.isFinished else { return }
         let claimed = inFlightOutputURLs()
         let outURL = OutputPathResolver.uniqueURL(for: item.spec.outputURL) {
@@ -121,7 +121,7 @@ final class QueueManager {
         wakePump()
     }
 
-    func clearFinished() {
+    public func clearFinished() {
         items.removeAll { $0.status.isFinished }
     }
 

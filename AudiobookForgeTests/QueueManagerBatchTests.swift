@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// Batch lifecycle: the pump should report exactly one start per burst of
 /// work and one finish (with counts) when the queue drains. Items here use

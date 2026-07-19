@@ -1,3 +1,4 @@
+import ForgeCore
 import SwiftUI
 
 struct QueuePanelView: View {
@@ -226,6 +227,20 @@ private enum HydrateMode: String, Identifiable {
     case edit, duplicate
     var id: String {
         rawValue
+    }
+}
+
+/// Presentation-only mapping kept out of ForgeCore so the core stays
+/// SwiftUI-free (a CLI consumer shouldn't drag UI frameworks in).
+extension QueueItem.Status {
+    var tint: Color {
+        switch self {
+        case .pending: .secondary
+        case .running: .accentColor
+        case .succeeded: .green
+        case .failed: .red
+        case .cancelled: .orange
+        }
     }
 }
 

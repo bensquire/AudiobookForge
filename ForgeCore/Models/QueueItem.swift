@@ -1,49 +1,48 @@
 import Foundation
 import Observation
-import SwiftUI
 
 @Observable
-final class QueueItem: Identifiable {
-    enum Status: Equatable {
+public final class QueueItem: Identifiable {
+    public enum Status: Equatable {
         case pending
         case running
         case succeeded
         case failed(String)
         case cancelled
 
-        var isPending: Bool {
+        public var isPending: Bool {
             if case .pending = self { true } else { false }
         }
 
-        var isRunning: Bool {
+        public var isRunning: Bool {
             if case .running = self { true } else { false }
         }
 
-        var isSucceeded: Bool {
+        public var isSucceeded: Bool {
             if case .succeeded = self { true } else { false }
         }
 
-        var isCancelled: Bool {
+        public var isCancelled: Bool {
             if case .cancelled = self { true } else { false }
         }
 
-        var isFailed: Bool {
+        public var isFailed: Bool {
             if case .failed = self { true } else { false }
         }
 
-        var isActive: Bool {
+        public var isActive: Bool {
             isPending || isRunning
         }
 
-        var isFinished: Bool {
+        public var isFinished: Bool {
             !isActive
         }
 
-        var isRetryable: Bool {
+        public var isRetryable: Bool {
             isFailed || isCancelled
         }
 
-        var label: String {
+        public var label: String {
             switch self {
             case .pending: "Pending"
             case .running: "Running"
@@ -53,26 +52,17 @@ final class QueueItem: Identifiable {
             }
         }
 
-        var tint: Color {
-            switch self {
-            case .pending: .secondary
-            case .running: .accentColor
-            case .succeeded: .green
-            case .failed: .red
-            case .cancelled: .orange
-            }
-        }
     }
 
-    let id = UUID()
-    var spec: EncodeSpec
+    public let id = UUID()
+    public var spec: EncodeSpec
     let sourceFingerprints: [URL: SourceFingerprint]
     let addedAt: Date
 
-    var status: Status = .pending
-    var progress: Double = 0
-    var progressLabel: String? // only set while running, derived elsewhere otherwise
-    var finalOutputURL: URL? // set on success (may differ from spec.outputURL)
+    public var status: Status = .pending
+    public var progress: Double = 0
+    public var progressLabel: String? // only set while running, derived elsewhere otherwise
+    public var finalOutputURL: URL? // set on success (may differ from spec.outputURL)
 
     init(spec: EncodeSpec,
          sourceFingerprints: [URL: SourceFingerprint],
@@ -83,11 +73,11 @@ final class QueueItem: Identifiable {
         self.addedAt = addedAt
     }
 
-    var title: String {
+    public var title: String {
         spec.metadata.title
     }
 
-    var author: String {
+    public var author: String {
         spec.metadata.author
     }
 }

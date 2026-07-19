@@ -1,6 +1,6 @@
 import CoreMedia
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 final class AudioCodecTests: XCTestCase {
     func test_init_recognisesAAC() {

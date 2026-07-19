@@ -8,8 +8,8 @@ import Foundation
 ///      queue row (no surprises).
 ///   2. At encode-start time as a defensive re-check in case another
 ///      finished item dropped a file at the same path in the meantime.
-enum OutputPathResolver {
-    static func uniqueURL(for desired: URL,
+public enum OutputPathResolver {
+    public static func uniqueURL(for desired: URL,
                           fileManager: FileManager = .default,
                           maxAttempts: Int = 999,
                           isTaken: (URL) -> Bool = { _ in false }) -> URL

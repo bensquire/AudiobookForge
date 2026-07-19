@@ -1,6 +1,6 @@
 import AVFoundation
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// End-to-end encodes against the real bundled ffmpeg. Tests run outside
 /// the app bundle, so `Bundled` is pointed at the repo's Resources/bin
@@ -232,7 +232,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
     }
 
     private func chapter(
-        _ url: URL, title: String, codec: AudiobookForge.AudioCodec
+        _ url: URL, title: String, codec: ForgeCore.AudioCodec
     ) -> Chapter {
         Chapter(
             sourceURL: url,

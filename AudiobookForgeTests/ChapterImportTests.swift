@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 final class ChapterImportTests: XCTestCase {
     func test_dedupe_dropsURLsAlreadyInTheChapterList() {

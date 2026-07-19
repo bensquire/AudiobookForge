@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// Shared fixtures for the queue-focused suites: a throwaway output
 /// directory per test and a minimal enqueueable draft. Subclass instead

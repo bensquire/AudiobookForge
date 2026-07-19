@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 final class OutputPathResolverTests: XCTestCase {
     private var tmp: URL!

@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// Pins `AudioProbe.parseBitrateFromFFmpegBanner` against captured stderr
 /// from the pinned ffmpeg version (see `scripts/build-ffmpeg.sh`). If

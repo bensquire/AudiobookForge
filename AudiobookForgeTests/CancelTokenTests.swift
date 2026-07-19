@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 final class CancelTokenTests: XCTestCase {
     func test_setOnCancel_firesWhenCancelled() {

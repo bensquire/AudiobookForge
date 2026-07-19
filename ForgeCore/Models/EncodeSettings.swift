@@ -1,24 +1,24 @@
 import Foundation
 
-struct EncodeSettings: Equatable {
-    enum Bitrate: String, CaseIterable, Identifiable {
+public struct EncodeSettings: Equatable {
+    public enum Bitrate: String, CaseIterable, Identifiable {
         case k32 = "32k"
         case k64 = "64k"
         case k96 = "96k"
         case k128 = "128k"
         case k192 = "192k"
         case source
-        var id: String {
+        public var id: String {
             rawValue
         }
 
-        var label: String {
+        public var label: String {
             self == .source ? "Match source" : rawValue
         }
 
         /// Numeric kbps for the fixed cases; nil for `.source`, whose
         /// value is resolved from the chapters at encode time.
-        var kbps: Int? {
+        public var kbps: Int? {
             switch self {
             case .k32: 32
             case .k64: 64
@@ -36,7 +36,7 @@ struct EncodeSettings: Equatable {
     /// applies a single computed gain to all chapters. Either way the
     /// remux fast-path is disabled because we have to re-encode to
     /// touch samples.
-    enum GainBoost: String, CaseIterable, Identifiable, Equatable {
+    public enum GainBoost: String, CaseIterable, Identifiable, Equatable {
         case off
         case dB3
         case dB6
@@ -44,11 +44,11 @@ struct EncodeSettings: Equatable {
         case dB12
         case autoNormalize
 
-        var id: String {
+        public var id: String {
             rawValue
         }
 
-        var label: String {
+        public var label: String {
             switch self {
             case .off: "Off"
             case .dB3: "+3 dB"
@@ -61,7 +61,7 @@ struct EncodeSettings: Equatable {
 
         /// dB value for the manual cases, or nil for `.off` and
         /// `.autoNormalize` (whose value is computed at encode time).
-        var manualDB: Int? {
+        public var manualDB: Int? {
             switch self {
             case .dB3: 3
             case .dB6: 6
@@ -71,13 +71,13 @@ struct EncodeSettings: Equatable {
             }
         }
 
-        var isManual: Bool {
+        public var isManual: Bool {
             manualDB != nil
         }
 
         /// Compact display suffix for the format summary line ("+6 dB",
         /// "auto-normalised", or empty for `.off`).
-        var suffix: String {
+        public var suffix: String {
             switch self {
             case .off: ""
             case .autoNormalize: "auto-normalised"
@@ -86,8 +86,8 @@ struct EncodeSettings: Equatable {
         }
     }
 
-    var bitrate: Bitrate = .source
-    var gainBoost: GainBoost = .off
-    var outputDirectory: URL?
-    var filenameTemplate: String = "{author}/{title}/{title}.m4b"
+    public var bitrate: Bitrate = .source
+    public var gainBoost: GainBoost = .off
+    public var outputDirectory: URL?
+    public var filenameTemplate: String = "{author}/{title}/{title}.m4b"
 }

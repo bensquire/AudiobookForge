@@ -1,3 +1,4 @@
+import ForgeCore
 import SwiftUI
 
 struct ContentView: View {

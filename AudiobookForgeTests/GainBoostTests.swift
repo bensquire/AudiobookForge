@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// Tests for the gain/loudness feature: GainBoost model, the
 /// canRemux gate, phase1Args integration, the ebur128 measure args,

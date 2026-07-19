@@ -1,6 +1,6 @@
 import Foundation
 
-extension TimeInterval {
+public extension TimeInterval {
     /// "1:23:45" or "23:45" — for per-chapter durations.
     var positional: String {
         let total = Int(self)

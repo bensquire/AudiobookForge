@@ -1,6 +1,6 @@
 import Foundation
 
-enum Bundled {
+public enum Bundled {
     private static let lock = NSLock()
     private static var cache: [String: URL?] = [:]
     private static var _overrideDirectory: URL?
@@ -19,7 +19,7 @@ enum Bundled {
     /// when the binaries are not yet bundled. Memoised because the
     /// fallback spawns a subprocess and `binary("ffmpeg")` gets called
     /// once per chapter during a drag-drop probe.
-    static func binary(_ name: String) -> URL? {
+    public static func binary(_ name: String) -> URL? {
         lock.lock()
         if let cached = cache[name] {
             lock.unlock()

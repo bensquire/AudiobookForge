@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 /// Tests for the pure helpers that drive the parallel-encode pipeline:
 /// concat-list-of-intermediates, the two arg builders, the

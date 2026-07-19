@@ -9,7 +9,7 @@ import Foundation
 /// - the plain path as a fallback, because unsigned dev builds
 ///   (`scripts/build.sh` passes CODE_SIGNING_ALLOWED=NO) have no
 ///   sandbox and can't create security-scoped bookmarks at all.
-enum SettingsStore {
+public enum SettingsStore {
     private enum Key {
         static let bitrate = "settings.bitrate"
         static let gain = "settings.gainBoost"
@@ -23,7 +23,7 @@ enum SettingsStore {
     /// creation talks to the sandbox daemon, which is the one
     /// non-trivial cost here and would otherwise run on every
     /// bitrate/gain click.
-    static func save(
+    public static func save(
         _ settings: EncodeSettings,
         previous: EncodeSettings? = nil,
         defaults: UserDefaults = .standard
@@ -49,7 +49,7 @@ enum SettingsStore {
     }
 
     @MainActor
-    static func load(defaults: UserDefaults = .standard) -> EncodeSettings {
+    public static func load(defaults: UserDefaults = .standard) -> EncodeSettings {
         var settings = EncodeSettings()
         if let raw = defaults.string(forKey: Key.bitrate),
            let bitrate = EncodeSettings.Bitrate(rawValue: raw)

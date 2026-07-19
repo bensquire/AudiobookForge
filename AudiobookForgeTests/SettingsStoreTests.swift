@@ -1,5 +1,5 @@
 import XCTest
-@testable import AudiobookForge
+@testable import ForgeCore
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {

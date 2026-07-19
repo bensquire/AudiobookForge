@@ -4,14 +4,14 @@ import Foundation
 /// Uses event-driven I/O (`readabilityHandler` + `terminationHandler`) so
 /// neither stderr nor process-wait blocks a cooperative-pool thread for the
 /// duration of the encode.
-enum FFmpegRunner {
-    enum RunError: Error, LocalizedError {
+public enum FFmpegRunner {
+    public enum RunError: Error, LocalizedError {
         case notFound
         case spawnFailed(String)
         case nonZeroExit(Int32, String)
         case cancelled
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .notFound: "ffmpeg binary not found"
             case let .spawnFailed(reason):
@@ -25,7 +25,7 @@ enum FFmpegRunner {
 
     /// Run ffmpeg. `totalDuration` lets us turn `time=` lines into a 0…1 fraction.
     @discardableResult
-    static func run(
+    public static func run(
         arguments: [String],
         totalDuration: TimeInterval,
         onProgress: @escaping (Double, String) -> Void,
@@ -107,7 +107,7 @@ enum FFmpegRunner {
     /// If `cancelToken` fires mid-run, the child is terminated and any
     /// stderr captured so far is returned (callers typically treat that
     /// as "couldn't measure" and fall back).
-    static func captureStderr(
+    public static func captureStderr(
         arguments: [String],
         cancelToken: CancelToken = .init()
     ) async -> String? {
@@ -188,14 +188,14 @@ enum FFmpegRunner {
 /// matters for EncodeJob, which both cascades to per-chunk tokens AND
 /// passes the token to `FFmpegRunner.run` which registers its own
 /// `process.terminate()` handler.)
-final class CancelToken: @unchecked Sendable {
+public final class CancelToken: @unchecked Sendable {
     private let lock = NSLock()
     private var _isCancelled = false
     private var handlers: [() -> Void] = []
 
-    init() {}
+    public init() {}
 
-    var isCancelled: Bool {
+    public var isCancelled: Bool {
         lock.lock(); defer { lock.unlock() }
         return _isCancelled
     }
@@ -204,13 +204,13 @@ final class CancelToken: @unchecked Sendable {
     /// the parent was already cancelled is born cancelled (`setOnCancel`
     /// fires immediately), which closes the "cancel landed before the
     /// child existed" race in one place instead of per call site.
-    func makeChild() -> CancelToken {
+    public func makeChild() -> CancelToken {
         let child = CancelToken()
         setOnCancel { child.cancel() }
         return child
     }
 
-    func setOnCancel(_ handler: @escaping () -> Void) {
+    public func setOnCancel(_ handler: @escaping () -> Void) {
         lock.lock()
         let wasCancelled = _isCancelled
         if !wasCancelled { handlers.append(handler) }
@@ -220,7 +220,7 @@ final class CancelToken: @unchecked Sendable {
         if wasCancelled { handler() }
     }
 
-    func cancel() {
+    public func cancel() {
         lock.lock()
         if _isCancelled {
             lock.unlock()

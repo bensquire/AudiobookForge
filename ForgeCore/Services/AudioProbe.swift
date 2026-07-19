@@ -10,25 +10,25 @@ import Foundation
 /// inflated bitrate. ffmpeg's stderr banner (`Audio: …, 64 kb/s`) reads
 /// the codec context's `bit_rate` directly, so we shell out for that
 /// number and use AVFoundation for everything else.
-enum AudioProbe {
-    struct Probed {
-        var title: String?
-        var artist: String?
-        var album: String?
-        var trackNumber: Int?
-        var duration: TimeInterval
-        var bitrate: Int = 0 // bits/sec
-        var codec: AudioCodec = .unknown("")
-        var sampleRate: Double = 0
-        var channels: Int = 0
+public enum AudioProbe {
+    public struct Probed {
+        public var title: String?
+        public var artist: String?
+        public var album: String?
+        public var trackNumber: Int?
+        public var duration: TimeInterval
+        public var bitrate: Int = 0 // bits/sec
+        public var codec: AudioCodec = .unknown("")
+        public var sampleRate: Double = 0
+        public var channels: Int = 0
         /// Whether the file carries embedded chapter markers (mp4
         /// chapter atoms, ID3 CHAP frames). A file that already has
         /// chapters is a finished audiobook — importing it as a single
         /// chapter would silently discard them.
-        var hasChapters = false
+        public var hasChapters = false
     }
 
-    static func probe(_ url: URL) async -> Probed {
+    public static func probe(_ url: URL) async -> Probed {
         let asset = AVURLAsset(url: url)
         async let durationCM = try? asset.load(.duration)
         async let meta = try? asset.load(.commonMetadata)

@@ -1,3 +1,4 @@
+import ForgeCore
 import SwiftUI
 
 /// Always-square cover thumbnail. The square frame is baked in so

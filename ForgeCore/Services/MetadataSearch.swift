@@ -3,17 +3,17 @@ import Foundation
 /// Audiobook metadata lookup. Primary source is Audnexus (community Audible
 /// mirror used by Audiobookshelf/Plex). iTunes Search API is the fallback
 /// for non-Audible titles.
-enum MetadataSearch {
-    enum Provider: String, CaseIterable, Identifiable {
+public enum MetadataSearch {
+    public enum Provider: String, CaseIterable, Identifiable {
         case audnexus
         case itunes
         case all
 
-        var id: String {
+        public var id: String {
             rawValue
         }
 
-        var label: String {
+        public var label: String {
             switch self {
             case .audnexus: "Audnexus"
             case .itunes: "iTunes"
@@ -22,16 +22,16 @@ enum MetadataSearch {
         }
     }
 
-    enum SearchError: Error, LocalizedError {
+    public enum SearchError: Error, LocalizedError {
         case badResponse
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .badResponse: "Unexpected response from metadata server"
             }
         }
     }
 
-    static func search(query: String, provider: Provider = .all) async throws -> [MetadataSearchResult] {
+    public static func search(query: String, provider: Provider = .all) async throws -> [MetadataSearchResult] {
         let results: [MetadataSearchResult]
         switch provider {
         case .audnexus:
@@ -52,7 +52,7 @@ enum MetadataSearch {
 
     /// Fetch the full Audnexus record for richer description, full
     /// narrator list, and a higher-res cover URL.
-    static func enrich(_ result: MetadataSearchResult) async throws -> MetadataSearchResult {
+    public static func enrich(_ result: MetadataSearchResult) async throws -> MetadataSearchResult {
         guard result.source == .audnexus else { return result }
         let url = URL(string: "https://api.audnex.us/books/\(result.id)")!
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -60,7 +60,7 @@ enum MetadataSearch {
         return result.merging(book)
     }
 
-    static func fetchCover(_ url: URL) async throws -> Data {
+    public static func fetchCover(_ url: URL) async throws -> Data {
         let (data, _) = try await URLSession.shared.data(from: url)
         return data
     }

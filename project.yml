@@ -16,10 +16,30 @@ settings:
     DEVELOPMENT_TEAM: ""
 
 targets:
+  # Headless core: probing, import rules, metadata, encoding, queue.
+  # Shared by the GUI app and (from Phase 2 of the pipeline plan) the
+  # forge CLI. No AppKit/SwiftUI in here.
+  ForgeCore:
+    type: framework
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ForgeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bensquire.ForgeCore
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_EMIT_LOC_STRINGS: NO
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
+
   AudiobookForge:
     type: application
     platform: macOS
     deploymentTarget: "14.0"
+    dependencies:
+      - target: ForgeCore
+        embed: true
     sources:
       - path: AudiobookForge
         excludes:
@@ -126,6 +146,7 @@ targets:
       - path: AudiobookForgeTests
     dependencies:
       - target: AudiobookForge
+      - target: ForgeCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bensquire.AudiobookForgeTests

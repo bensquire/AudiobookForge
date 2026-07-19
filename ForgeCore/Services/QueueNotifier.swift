@@ -6,7 +6,7 @@ import UserNotifications
 /// requires a host app bundle and crashes in a bare test runner) — the
 /// app wires these in via QueueManager's onBatchStarted/onBatchFinished.
 @MainActor
-enum QueueNotifier {
+public enum QueueNotifier {
     /// Without a delegate macOS silently swallows notifications while
     /// the app is frontmost; this one opts into showing them anyway.
     /// UNUserNotificationCenter holds its delegate weakly, so keep the
@@ -14,13 +14,13 @@ enum QueueNotifier {
     private static let presenter = ForegroundPresenter()
 
     /// Call once at app startup, before any notification is requested.
-    static func install() {
+    public static func install() {
         UNUserNotificationCenter.current().delegate = presenter
     }
 
     /// Ask once, at the moment the user kicks off long-running work.
     /// Safe to call repeatedly — the system remembers the answer.
-    static func requestAuthorization() {
+    public static func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound]
         ) { granted, error in
@@ -34,7 +34,7 @@ enum QueueNotifier {
         }
     }
 
-    static func queueDrained(succeeded: Int, failed: Int) {
+    public static func queueDrained(succeeded: Int, failed: Int) {
         let content = UNMutableNotificationContent()
         content.title = "Audiobook queue finished"
         content.body = summary(succeeded: succeeded, failed: failed)
@@ -65,7 +65,7 @@ enum QueueNotifier {
 
     /// "3 books encoded" / "2 books encoded, 1 failed" / "1 book failed".
     /// Pure so it's unit-testable without a notification center.
-    nonisolated static func summary(succeeded: Int, failed: Int) -> String {
+    public nonisolated static func summary(succeeded: Int, failed: Int) -> String {
         let book = { (n: Int) in n == 1 ? "1 book" : "\(n) books" }
         switch (succeeded, failed) {
         case (_, 0): return "\(book(succeeded)) encoded"

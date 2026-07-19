@@ -5,23 +5,25 @@ import Observation
 /// `QueueItem` once a draft is enqueued; this type is purely about the
 /// prep area.
 @Observable
-final class AudiobookProject {
-    var chapters: [Chapter] = []
-    var metadata: BookMetadata = .init()
-    var settings: EncodeSettings = .init()
+public final class AudiobookProject {
+    public var chapters: [Chapter] = []
+    public var metadata: BookMetadata = .init()
+    public var settings: EncodeSettings = .init()
+
+    public init() {}
 
     /// Monotonic counter bumped on every `reset()` / `hydrate(from:)`.
     /// Views with local state that should follow the project's lifecycle
     /// (e.g. the metadata search panel's results) observe this rather
     /// than inferring "we reset" from a chapter-array side effect — that
     /// would also fire when the user just deletes their last chapter.
-    var resetToken: Int = 0
+    public var resetToken: Int = 0
 
-    var totalDuration: TimeInterval {
+    public var totalDuration: TimeInterval {
         chapters.reduce(0) { $0 + $1.duration }
     }
 
-    var canEnqueue: Bool {
+    public var canEnqueue: Bool {
         !chapters.isEmpty
             && metadata.hasRequiredFields
             && settings.outputDirectory != nil
@@ -31,7 +33,7 @@ final class AudiobookProject {
     /// book. We deliberately preserve `settings` (output dir, codec,
     /// bitrate, filename template) so the user doesn't have to re-pick
     /// them for every queued book.
-    func reset() {
+    public func reset() {
         chapters = []
         metadata = .init()
         resetToken &+= 1
@@ -42,7 +44,7 @@ final class AudiobookProject {
     /// `settings.outputDirectory` + filename template at enqueue time.
     /// Settings overwrite is intentional — the user is editing *that*
     /// item, so its output dir / bitrate / gain are what they want back.
-    func hydrate(from spec: EncodeSpec) {
+    public func hydrate(from spec: EncodeSpec) {
         chapters = spec.chapters
         metadata = spec.metadata
         settings = spec.settings

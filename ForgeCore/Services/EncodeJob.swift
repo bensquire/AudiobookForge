@@ -5,13 +5,13 @@ import os
 /// Value-typed description of one encode job. Decoupling this from the live
 /// `AudiobookProject` lets the queue snapshot the user's draft at enqueue
 /// time and run it later without worrying about mutation.
-struct EncodeSpec {
-    var chapters: [Chapter]
-    var metadata: BookMetadata
-    var settings: EncodeSettings
-    var outputURL: URL // final on-disk destination (already deduped)
+public struct EncodeSpec {
+    public var chapters: [Chapter]
+    public var metadata: BookMetadata
+    public var settings: EncodeSettings
+    public var outputURL: URL // final on-disk destination (already deduped)
 
-    var totalDuration: TimeInterval {
+    public var totalDuration: TimeInterval {
         chapters.reduce(0) { $0 + $1.duration }
     }
 }
@@ -20,15 +20,15 @@ struct EncodeSpec {
 /// token; progress goes out via callback so the caller (live UI or queue
 /// item) can decide how to surface it.
 @MainActor
-final class EncodeJob {
-    let spec: EncodeSpec
-    let cancelToken = CancelToken()
+public final class EncodeJob {
+    public let spec: EncodeSpec
+    public let cancelToken = CancelToken()
 
     /// `frac` is 0…1. `status` is a short human-readable label like
     /// "Encoding chapter 3/12…" or "Remuxing (no re-encode)…".
-    var onProgress: (Double, String) -> Void = { _, _ in }
+    public var onProgress: (Double, String) -> Void = { _, _ in }
 
-    init(spec: EncodeSpec) {
+    public init(spec: EncodeSpec) {
         self.spec = spec
     }
 
@@ -36,7 +36,7 @@ final class EncodeJob {
     /// (may differ from `spec.outputURL` if a late collision forced a
     /// rename). Throws on failure or cancellation.
     @discardableResult
-    func run() async throws -> URL {
+    public func run() async throws -> URL {
         onProgress(0, "Preparing…")
         return try await runInner()
     }
@@ -574,7 +574,7 @@ final class EncodeJob {
     /// True when every source file already uses a codec/sample-rate/channel
     /// layout that MP4 supports natively and the user hasn't asked for a
     /// specific output bitrate.
-    nonisolated static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
+    public nonisolated static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
         guard settings.bitrate == .source else { return false }
         // Any gain adjustment requires re-encoding — you can't alter
         // samples and `-c:a copy` at the same time.
@@ -592,7 +592,7 @@ final class EncodeJob {
 
     /// True when ImageIO can identify `data` as an image with at least
     /// one frame. Used to vet remote cover bytes before ffmpeg sees them.
-    nonisolated static func isDecodableImage(_ data: Data) -> Bool {
+    public nonisolated static func isDecodableImage(_ data: Data) -> Bool {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return false
         }
@@ -603,7 +603,7 @@ final class EncodeJob {
     /// path stores per-chapter intermediates AND the final concat before
     /// the partial-file rename, so it needs ~2× the payload; remux writes
     /// the payload once. Both get headroom for container overhead.
-    nonisolated static func estimatedRequiredBytes(
+    public nonisolated static func estimatedRequiredBytes(
         chapters: [Chapter], settings: EncodeSettings
     ) -> Int64 {
         let kbps = resolveBitrateKbps(chapters: chapters, settings: settings)
@@ -613,14 +613,14 @@ final class EncodeJob {
         return Int64((payloadBytes * factor).rounded(.up))
     }
 
-    nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
+    public nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
         "\(resolveBitrateKbps(chapters: chapters, settings: settings))k"
     }
 
     /// The typed value behind `resolveBitrate` — ffmpeg's "64k" spelling
     /// is applied only at the argument boundary so numeric consumers
     /// (disk-space estimate) don't have to reverse-parse it.
-    nonisolated static func resolveBitrateKbps(chapters: [Chapter], settings: EncodeSettings) -> Int {
+    public nonisolated static func resolveBitrateKbps(chapters: [Chapter], settings: EncodeSettings) -> Int {
         if let fixed = settings.bitrate.kbps { return fixed }
         let total = chapters.reduce(0.0) { $0 + $1.duration }
         let weighted = chapters.reduce(0.0) {
@@ -635,7 +635,7 @@ final class EncodeJob {
     /// Apply the user's `filenameTemplate` to a base directory and metadata.
     /// Used at enqueue time to compute `plannedOutputURL` before any encode
     /// has run — this is what we surface in the queue UI.
-    nonisolated static func resolveOutputURL(in base: URL, metadata: BookMetadata,
+    public nonisolated static func resolveOutputURL(in base: URL, metadata: BookMetadata,
                                              template: String) -> URL
     {
         var path = template

@@ -17,7 +17,7 @@ import Foundation
 /// requires a paired stop call per use site, which is fragile, and the
 /// downside is just slightly higher kernel bookkeeping.
 @MainActor
-enum SecurityScope {
+public enum SecurityScope {
     /// Key on the standardized path, not the URL — `URL` equality is
     /// surprising across `file://x` vs `file://x/`, symlink vs resolved,
     /// and other normal-looking variations that would all hit the same
@@ -26,7 +26,7 @@ enum SecurityScope {
 
     /// Start the security scope on `url` and remember we did, so we
     /// don't double-start the same URL (which is a real cost). Idempotent.
-    static func retain(_ url: URL) {
+    public static func retain(_ url: URL) {
         let key = url.standardizedFileURL.path
         guard !held.contains(key) else { return }
         if url.startAccessingSecurityScopedResource() {
