@@ -64,6 +64,15 @@ final class EncodeJobIntegrationTests: XCTestCase {
         XCTAssertEqual(chapterTitles, ["Opening", "Closing"])
         let title = try await loadCommonTitle(asset)
         XCTAssertEqual(title, "Integration Book")
+
+        // The finished m4b must read back as "already forged" so the
+        // import guard keeps it out of the chapter list, while the raw
+        // WAV source reads as chapterless and importable.
+        async let probedOutput = AudioProbe.probe(outputURL)
+        async let probedSource = AudioProbe.probe(wav1)
+        let hasChapters = await (probedOutput.hasChapters, probedSource.hasChapters)
+        XCTAssertTrue(hasChapters.0)
+        XCTAssertFalse(hasChapters.1)
     }
 
     // MARK: - remux path

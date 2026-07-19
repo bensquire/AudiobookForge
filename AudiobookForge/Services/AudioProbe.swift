@@ -21,6 +21,11 @@ enum AudioProbe {
         var codec: AudioCodec = .unknown("")
         var sampleRate: Double = 0
         var channels: Int = 0
+        /// Whether the file carries embedded chapter markers (mp4
+        /// chapter atoms, ID3 CHAP frames). A file that already has
+        /// chapters is a finished audiobook — importing it as a single
+        /// chapter would silently discard them.
+        var hasChapters = false
     }
 
     static func probe(_ url: URL) async -> Probed {
@@ -29,8 +34,14 @@ enum AudioProbe {
         async let meta = try? asset.load(.commonMetadata)
         async let id3 = try? asset.loadMetadata(for: .id3Metadata)
         async let ffmpegBitrate = ffmpegStreamBitrate(url)
+        // A non-empty chapter-locale list already proves chapters exist —
+        // loading the actual metadata groups would read every chapter
+        // title out of the sample data, which is wasted I/O per imported
+        // file (imports can be hundreds of files on a network volume).
+        async let chapterLocales = try? asset.load(.availableChapterLocales)
 
         var probed = Probed(duration: 0)
+        probed.hasChapters = await (chapterLocales)?.isEmpty == false
 
         if let cm = await durationCM {
             probed.duration = CMTimeGetSeconds(cm)

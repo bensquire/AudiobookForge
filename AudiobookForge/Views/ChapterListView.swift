@@ -7,6 +7,10 @@ struct ChapterListView: View {
     @State private var isImporting = false
     @State private var isTargeted = false
     @State private var confirmClear = false
+    /// Files skipped on import because they already carry embedded
+    /// chapters — flattening one into a single chapter would silently
+    /// destroy its structure (Audible m4bs etc. are already forged).
+    @State private var skippedFinishedBooks: [String] = []
 
     var body: some View {
         @Bindable var project = project
@@ -32,6 +36,22 @@ struct ChapterListView: View {
             if case let .success(urls) = result {
                 Task { await importPaths(urls) }
             }
+        }
+        .alert(
+            "Already a chaptered audiobook",
+            isPresented: Binding(
+                get: { !skippedFinishedBooks.isEmpty },
+                set: { if !$0 { skippedFinishedBooks = [] } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                skippedFinishedBooks.joined(separator: "\n")
+                    + "\n\nThese files already contain chapter markers — "
+                    + "importing them here would flatten the book into a "
+                    + "single chapter. Nothing to forge."
+            )
         }
         .overlay(alignment: .center) {
             if isTargeted {
@@ -235,7 +255,11 @@ struct ChapterListView: View {
             return out.sorted { $0.0 < $1.0 }
         }
 
-        let added: [Chapter] = probed.map { _, url, p in
+        let (importable, skippedNames) = ChapterImport.partitionFinished(
+            probed.map { (url: $0.1, info: $0.2) }
+        )
+
+        let added: [Chapter] = importable.map { url, p in
             Chapter(
                 sourceURL: url,
                 title: p.title?.nilIfEmpty ?? url.deletingPathExtension().lastPathComponent,
@@ -248,11 +272,12 @@ struct ChapterListView: View {
         }
 
         await MainActor.run {
-            if let first = probed.first?.2, project.metadata.isEmpty {
+            if let first = importable.first?.info, project.metadata.isEmpty {
                 if project.metadata.title.isEmpty { project.metadata.title = first.album ?? "" }
                 if project.metadata.author.isEmpty { project.metadata.author = first.artist ?? "" }
             }
             project.chapters.append(contentsOf: added)
+            skippedFinishedBooks = skippedNames
         }
     }
 }
