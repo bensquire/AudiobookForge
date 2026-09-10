@@ -16,6 +16,20 @@ if ! command -v xcodegen >/dev/null 2>&1; then
 fi
 xcodegen generate --quiet
 
+# The test bundle links ForgeCore directly and never builds the CLI, so a
+# green suite says nothing about ForgeCLI compiling. Build it here so a
+# local run is as load-bearing as CI.
+echo "==> Building forge CLI"
+xcodebuild \
+  -project AudiobookForge.xcodeproj \
+  -scheme ForgeCLI \
+  -configuration Debug \
+  -derivedDataPath build \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build -quiet
+
 ARGS=()
 if [[ "${1:-}" == "-only" && -n "${2:-}" ]]; then
   ARGS+=(-only-testing:"AudiobookForgeTests/$2")

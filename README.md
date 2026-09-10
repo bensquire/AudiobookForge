@@ -11,7 +11,7 @@ encode queue.**
 [![Latest](https://img.shields.io/github/v/release/bensquire/AudiobookForge?include_prereleases&label=latest&logo=apple&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/bensquire/AudiobookForge/total?label=downloads&cacheSeconds=300&v=2)](https://github.com/bensquire/AudiobookForge/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-007aff?logo=apple&v=2)](https://www.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/swift-5-f05138?logo=swift&v=2)](https://swift.org)
+[![Swift](https://img.shields.io/badge/swift-6-f05138?logo=swift&v=2)](https://swift.org)
 [![License](https://img.shields.io/github/license/bensquire/AudiobookForge?label=license&cacheSeconds=300&v=2)](LICENSE)
 
 [**Download latest →**](https://github.com/bensquire/AudiobookForge/releases/latest) ·
@@ -43,6 +43,10 @@ source (stripped to ~10 MB, only the codecs/muxers we use). Subsequent
 runs short-circuit.
 
 Or open `AudiobookForge.xcodeproj` in Xcode after running `xcodegen generate`.
+The app is sandboxed, so building it from Xcode needs a signing team:
+`export DEVELOPMENT_TEAM=XXXXXXXXXX` before generating and xcodegen bakes
+it into the project (otherwise pick one under Signing & Capabilities each
+time the project is regenerated).
 
 ## Tests
 
@@ -213,7 +217,7 @@ git tag v0.1.0 && git push origin v0.1.0
 Dry-run locally without burning a tag:
 
 ```sh
-brew install xcodegen create-dmg nasm pkg-config
+brew install xcodegen create-dmg pkg-config
 scripts/release.sh 0.1.0
 ```
 

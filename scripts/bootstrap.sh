@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 need=()
-for cmd in xcodegen nasm pkg-config; do
+for cmd in xcodegen pkg-config; do
   command -v "$cmd" >/dev/null 2>&1 || need+=("$cmd")
 done
 if [[ ${#need[@]} -gt 0 ]]; then

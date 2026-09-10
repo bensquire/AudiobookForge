@@ -179,4 +179,85 @@ final class QueueManagerTests: QueueTestCase {
         // Assert
         XCTAssertFalse(queue.isProcessing)
     }
+
+    // MARK: - retry
+
+    func test_retry_replacesFailedItemWithAFreshPendingOne() async throws {
+        // Arrange — the draft's source doesn't exist, so the worker fails
+        // it in preflight almost immediately.
+        let queue = QueueManager()
+        let original = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
+        try await waitUntil { original.status.isFailed }
+
+        // Act
+        queue.retry(original)
+
+        // Assert — same slot, new item, and it runs (and fails) again.
+        XCTAssertEqual(queue.items.count, 1)
+        let replacement = try XCTUnwrap(queue.items.first)
+        XCTAssertNotEqual(replacement.id, original.id)
+        XCTAssertEqual(replacement.spec.outputURL, original.spec.outputURL)
+        try await waitUntil { replacement.status.isFailed }
+        await queue.shutdown()
+    }
+
+    func test_retry_ignoresItemsThatAreStillActive() throws {
+        // Arrange
+        let queue = QueueManager()
+        let item = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
+        let before = queue.items.map(\.id)
+
+        // Act — pending or running items are not retryable.
+        queue.retry(item)
+
+        // Assert
+        XCTAssertEqual(queue.items.map(\.id), before)
+    }
+
+    // MARK: - cancel while running
+
+    func test_cancel_whileRunning_terminatesTheJobAndMarksCancelled() async throws {
+        // Arrange — a real PCM chapter long enough that the encode is
+        // still in flight when we cancel.
+        Bundled.setOverrideDirectory(repoBinDir)
+        defer { Bundled.setOverrideDirectory(nil) }
+        try XCTSkipIf(Bundled.binary("ffmpeg") == nil, "bundled ffmpeg not built")
+        let wav = tmp.appendingPathComponent("long.wav")
+        try writeSineWav(to: wav, seconds: 600, frequency: 440)
+        let outDir = tmp.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let draft = makeDraft(outputDir: outDir, title: "Long")
+        draft.chapters = [
+            Chapter(sourceURL: wav, title: "Long", duration: 600, codec: .pcm, sampleRate: 44100, channels: 1)
+        ]
+        let queue = QueueManager()
+        let item = try XCTUnwrap(queue.enqueue(from: draft))
+        try await waitUntil { item.status.isRunning && item.progressLabel?.hasPrefix("Encoding") == true }
+
+        // Act
+        queue.cancel(item)
+
+        // Assert — the worker unwinds, the item reads Cancelled (not
+        // Failed), the queue is idle, and nothing landed in the output dir.
+        try await waitUntil { item.status.isCancelled }
+        XCTAssertFalse(queue.isProcessing)
+        XCTAssertNil(item.progressLabel)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outDir.path), [])
+        await queue.shutdown()
+    }
+
+    // MARK: - helpers
+
+    private func waitUntil(
+        timeout: TimeInterval = 15,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else { throw TimedOut() }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
 }
+
+private struct TimedOut: Error {}

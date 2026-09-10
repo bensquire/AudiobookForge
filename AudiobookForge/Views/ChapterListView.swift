@@ -255,7 +255,7 @@ struct ChapterListView: View {
             of: (Int, URL, AudioProbe.Probed).self
         ) { group in
             for (i, url) in files.enumerated() {
-                group.addTask { await(i, url, AudioProbe.probe(url)) }
+                group.addTask { await (i, url, AudioProbe.probe(url)) }
             }
             var out: [(Int, URL, AudioProbe.Probed)] = []
             for await item in group {

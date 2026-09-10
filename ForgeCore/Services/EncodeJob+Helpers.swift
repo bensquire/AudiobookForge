@@ -8,7 +8,7 @@ import ImageIO
 extension EncodeJob {
     // MARK: - Pure arg builders (unit-testable, no Process spawn)
 
-    nonisolated static func remuxArgs(
+    static func remuxArgs(
         concatListURL: URL, metaURL: URL, coverURL: URL?, outputURL: URL
     ) -> [String] {
         concatToMP4Args(
@@ -20,7 +20,7 @@ extension EncodeJob {
         )
     }
 
-    nonisolated static func phase1Args(
+    static func phase1Args(
         input: URL,
         output: URL,
         bitrate: String,
@@ -54,7 +54,7 @@ extension EncodeJob {
     /// source audio for `ProgressAggregator`, and a rounded percent for
     /// the per-chunk update gate. Kept separate because the two units
     /// were once confused here and the bar sat at 0% for whole encodes.
-    nonisolated static func phase1ChunkProgress(
+    static func phase1ChunkProgress(
         fraction: Double, chapterDuration: TimeInterval
     ) -> (seconds: TimeInterval, pct: Int) {
         let clamped = min(1, max(0, fraction))
@@ -66,12 +66,12 @@ extension EncodeJob {
     /// speech, so two minutes is comfortably enough for audiobook
     /// chapters (low dynamic range, few gated regions). Worst-case drift
     /// vs. full-file integrated is ~0.3 LU on typical speech content.
-    nonisolated static let ebur128MeasureCapSeconds: Int = 120
+    static let ebur128MeasureCapSeconds: Int = 120
 
     /// `ffmpeg` arg list to measure a single chapter's integrated
     /// loudness via the `ebur128` filter. No encoder work, no output —
     /// just decode + meter, capped to `ebur128MeasureCapSeconds`.
-    nonisolated static func ebur128MeasureArgs(input: URL) -> [String] {
+    static func ebur128MeasureArgs(input: URL) -> [String] {
         [
             "-i", input.path,
             "-t", String(ebur128MeasureCapSeconds),
@@ -86,7 +86,7 @@ extension EncodeJob {
     /// `alimiter` to prevent digital clipping when the boost pushes an
     /// already-loud sample past 0 dBFS. Shared between manual and
     /// auto-normalize paths so the limiter ceiling stays in one place.
-    nonisolated static func gainFilter(dB: Double) -> String {
+    static func gainFilter(dB: Double) -> String {
         // Manual cases pass whole-number dB; the auto-normalize path
         // pre-rounds to one decimal. Print without trailing zero noise.
         let asInt = Int(dB)
@@ -96,11 +96,11 @@ extension EncodeJob {
 
     /// Deprecated alias — keep the old `Int`-only entry point for the
     /// existing test surface. New code should call `gainFilter(dB:)`.
-    nonisolated static func manualGainFilter(dB: Int) -> String {
+    static func manualGainFilter(dB: Int) -> String {
         gainFilter(dB: Double(dB))
     }
 
-    nonisolated static func phase2Args(
+    static func phase2Args(
         intermediatesListURL: URL, metaURL: URL, coverURL: URL?, outputURL: URL
     ) -> [String] {
         // `+genpts` smooths the 1-sample concat gap that mp4 intermediates
@@ -118,7 +118,7 @@ extension EncodeJob {
     /// Shared body for remuxArgs/phase2Args. Both run a `-c:a copy`
     /// concat over a list of files plus an ffmetadata chapter file plus
     /// an optional cover image.
-    private nonisolated static func concatToMP4Args(
+    private static func concatToMP4Args(
         listURL: URL, metaURL: URL, coverURL: URL?, outputURL: URL, extraFflags: String?
     ) -> [String] {
         let fflags = extraFflags.map { "+fastseek+\($0)" } ?? "+fastseek"
@@ -153,7 +153,7 @@ extension EncodeJob {
     ///
     /// Returns nil on malformed input or when ffmpeg printed `-inf`
     /// (i.e. silent stream).
-    nonisolated static func parseEbur128IntegratedLUFS(_ stderr: String) -> Double? {
+    static func parseEbur128IntegratedLUFS(_ stderr: String) -> Double? {
         // Find the "Integrated loudness:" section header and then the
         // first `I:   <value> LUFS` line beneath it. We anchor on the
         // header so we don't accidentally pick up the per-frame
@@ -172,7 +172,7 @@ extension EncodeJob {
     /// of book-level integrated loudness for speech content.
     ///
     /// Returns nil for empty input or when all chapters are silent.
-    nonisolated static func combineLoudness(
+    static func combineLoudness(
         chapterIs: [Double],
         durations: [TimeInterval]
     ) -> Double? {
@@ -199,13 +199,13 @@ extension EncodeJob {
 
     /// Target integrated loudness in LUFS. Industry audiobook standard
     /// (Apple Books / Audible). Manual boosts ignore this.
-    nonisolated static let autoNormalizeTargetLUFS: Double = -16.0
+    static let autoNormalizeTargetLUFS: Double = -16.0
 
     /// Bound the auto-normalize gain to a sane range so a wildly-off
     /// measurement (e.g. a silent chapter) can't trash the mix.
-    nonisolated static let autoNormalizeGainBounds: ClosedRange<Double> = -6.0 ... 20.0
+    static let autoNormalizeGainBounds: ClosedRange<Double> = -6.0 ... 20.0
 
-    private nonisolated static func coverMappingArgs() -> [String] {
+    private static func coverMappingArgs() -> [String] {
         [
             "-map", "2:v",
             "-c:v", "mjpeg",
@@ -220,7 +220,7 @@ extension EncodeJob {
     /// True when every source file already uses a codec/sample-rate/channel
     /// layout that MP4 supports natively and the user hasn't asked for a
     /// specific output bitrate.
-    public nonisolated static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
+    public static func canRemux(chapters: [Chapter], settings: EncodeSettings) -> Bool {
         guard settings.bitrate == .source else { return false }
         // Any gain adjustment requires re-encoding — you can't alter
         // samples and `-c:a copy` at the same time.
@@ -238,7 +238,7 @@ extension EncodeJob {
 
     /// True when ImageIO can identify `data` as an image with at least
     /// one frame. Used to vet remote cover bytes before ffmpeg sees them.
-    public nonisolated static func isDecodableImage(_ data: Data) -> Bool {
+    public static func isDecodableImage(_ data: Data) -> Bool {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return false
         }
@@ -249,7 +249,7 @@ extension EncodeJob {
     /// path stores per-chapter intermediates AND the final concat before
     /// the partial-file rename, so it needs ~2× the payload; remux writes
     /// the payload once. Both get headroom for container overhead.
-    public nonisolated static func estimatedRequiredBytes(
+    public static func estimatedRequiredBytes(
         chapters: [Chapter], settings: EncodeSettings
     ) -> Int64 {
         let kbps = resolveBitrateKbps(chapters: chapters, settings: settings)
@@ -259,14 +259,14 @@ extension EncodeJob {
         return Int64((payloadBytes * factor).rounded(.up))
     }
 
-    public nonisolated static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
+    public static func resolveBitrate(chapters: [Chapter], settings: EncodeSettings) -> String {
         "\(resolveBitrateKbps(chapters: chapters, settings: settings))k"
     }
 
     /// The typed value behind `resolveBitrate` — ffmpeg's "64k" spelling
     /// is applied only at the argument boundary so numeric consumers
     /// (disk-space estimate) don't have to reverse-parse it.
-    public nonisolated static func resolveBitrateKbps(chapters: [Chapter], settings: EncodeSettings) -> Int {
+    public static func resolveBitrateKbps(chapters: [Chapter], settings: EncodeSettings) -> Int {
         if let fixed = settings.bitrate.kbps { return fixed }
         let total = chapters.reduce(0.0) { $0 + $1.duration }
         let weighted = chapters.reduce(0.0) {
@@ -281,8 +281,8 @@ extension EncodeJob {
     /// Apply the user's `filenameTemplate` to a base directory and metadata.
     /// Used at enqueue time to compute `plannedOutputURL` before any encode
     /// has run — this is what we surface in the queue UI.
-    public nonisolated static func resolveOutputURL(in base: URL, metadata: BookMetadata,
-                                                    template: String) -> URL
+    public static func resolveOutputURL(in base: URL, metadata: BookMetadata,
+                                        template: String) -> URL
     {
         var path = template
         let tokens: [(String, String)] = [
@@ -301,7 +301,7 @@ extension EncodeJob {
     /// usual illegal characters, `.` / `..` are directory references and
     /// a leading dot hides the file — an author of `..` would otherwise
     /// resolve to `base/../Title/Title.m4b` and escape the chosen root.
-    nonisolated static func sanitize(_ s: String) -> String {
+    static func sanitize(_ s: String) -> String {
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
         var cleaned = s.components(separatedBy: illegal).joined(separator: "_")
             .trimmingCharacters(in: .whitespaces)

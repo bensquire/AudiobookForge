@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import XCTest
 @testable import ForgeCore
 
@@ -68,7 +69,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // WAV source reads as chapterless and importable.
         async let probedOutput = AudioProbe.probe(outputURL)
         async let probedSource = AudioProbe.probe(wav1)
-        let hasChapters = await(probedOutput.hasChapters, probedSource.hasChapters)
+        let hasChapters = await (probedOutput.hasChapters, probedSource.hasChapters)
         XCTAssertTrue(hasChapters.0)
         XCTAssertFalse(hasChapters.1)
 
@@ -193,6 +194,101 @@ final class EncodeJobIntegrationTests: XCTestCase {
         } catch {
             XCTFail("expected RunError.nonZeroExit, got \(error)")
         }
+    }
+
+    // MARK: - auto-normalize
+
+    func test_autoNormalize_measuresAndBringsBookToTarget() async throws {
+        // Arrange — two loud-ish sine chapters (≈ -12 LUFS) with
+        // auto-normalize on. The pass must measure them, compute one
+        // book-wide offset, and re-encode through a volume filter.
+        let wav1 = tmp.appendingPathComponent("n1.wav")
+        let wav2 = tmp.appendingPathComponent("n2.wav")
+        try writeSineWav(to: wav1, seconds: 3.0, frequency: 440)
+        try writeSineWav(to: wav2, seconds: 3.0, frequency: 660)
+        var spec = makeSpec(
+            chapters: [
+                chapter(wav1, title: "One", codec: .pcm),
+                chapter(wav2, title: "Two", codec: .pcm)
+            ],
+            bitrate: .k64
+        )
+        spec.settings.gainBoost = .autoNormalize
+        let labels = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let job = EncodeJob(spec: spec) { _, label in labels.withLock { $0.append(label) } }
+
+        // Act
+        let outputURL = try await job.run()
+
+        // Assert — the measurement phase ran, and the output's integrated
+        // loudness sits at the target (± what a 6 s tone can hit).
+        XCTAssertTrue(labels.withLock { $0 }.contains { $0.hasPrefix("Measuring loudness") })
+        let measured = await FFmpegRunner.captureStderr(
+            arguments: EncodeJob.ebur128MeasureArgs(input: outputURL)
+        )
+        let stderr = try XCTUnwrap(measured)
+        let lufs = try XCTUnwrap(EncodeJob.parseEbur128IntegratedLUFS(stderr))
+        XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
+    }
+
+    func test_autoNormalize_failsLoudlyWhenNothingCanBeMeasured() async throws {
+        // Arrange — a "chapter" whose file isn't audio at all, so ebur128
+        // has nothing to report. Encoding it unnormalized and saying
+        // Done would be worse than failing.
+        let junk = tmp.appendingPathComponent("junk.wav")
+        try Data("not a wav".utf8).write(to: junk)
+        var spec = makeSpec(chapters: [chapter(junk, title: "Junk", codec: .pcm)], bitrate: .k64)
+        spec.settings.gainBoost = .autoNormalize
+        let job = EncodeJob(spec: spec)
+
+        // Act / Assert
+        do {
+            _ = try await job.run()
+            XCTFail("expected loudnessMeasurementFailed")
+        } catch let error as EncodeError {
+            guard case .loudnessMeasurementFailed = error else {
+                return XCTFail("expected loudnessMeasurementFailed, got \(error)")
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: spec.outputURL.path))
+    }
+
+    // MARK: - mid-run cancellation
+
+    func test_cancelMidRun_terminatesFFmpegAndLeavesNoPartialOutput() async throws {
+        // Arrange — a long enough re-encode that a cancel can land while
+        // ffmpeg is genuinely running, into an output dir of its own so
+        // "nothing was written" is checkable.
+        let wav = tmp.appendingPathComponent("long.wav")
+        try writeSineWav(to: wav, seconds: 600, frequency: 440)
+        let outDir = tmp.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        var spec = makeSpec(chapters: [chapter(wav, title: "Long", codec: .pcm)], bitrate: .k64)
+        spec.outputURL = outDir.appendingPathComponent("Long.m4b")
+        let sawEncoding = OSAllocatedUnfairLock<Bool>(initialState: false)
+        let job = EncodeJob(spec: spec) { _, label in
+            if label.hasPrefix("Encoding chapter") { sawEncoding.withLock { $0 = true } }
+        }
+
+        // Act — start, wait until phase 1 has reported progress, cancel.
+        let run = Task { try await job.run() }
+        let deadline = Date().addingTimeInterval(10)
+        while !sawEncoding.withLock({ $0 }), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(sawEncoding.withLock { $0 }, "encode never reported progress")
+        job.cancelToken.cancel()
+
+        // Assert — surfaces as .cancelled, promptly, and the output
+        // directory holds neither a .partial nor a finished file.
+        do {
+            _ = try await run.value
+            XCTFail("expected RunError.cancelled")
+        } catch let error as FFmpegRunner.RunError {
+            guard case .cancelled = error else { return XCTFail("expected .cancelled, got \(error)") }
+        }
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: outDir.path)
+        XCTAssertEqual(leftovers, [], "cancel left files behind: \(leftovers)")
     }
 
     // MARK: - fixture + spec helpers

@@ -72,7 +72,7 @@ public enum AudioProbe {
             }
         }
 
-        for item in await(meta) ?? [] {
+        for item in await (meta) ?? [] {
             guard let key = item.commonKey?.rawValue else { continue }
             switch key {
             case AVMetadataKey.commonKeyTitle.rawValue:
@@ -86,7 +86,7 @@ public enum AudioProbe {
             }
         }
 
-        for item in await(id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
+        for item in await (id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
             if let s = try? await item.load(.stringValue) {
                 probed.trackNumber = Int(s.split(separator: "/").first.map(String.init) ?? s)
             }

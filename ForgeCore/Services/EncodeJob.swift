@@ -16,20 +16,27 @@ public struct EncodeSpec: Sendable {
     }
 }
 
-/// Orchestrates a single conversion run. Stateless aside from the cancel
-/// token; progress goes out via callback so the caller (live UI or queue
-/// item) can decide how to surface it.
-@MainActor
-public final class EncodeJob {
+/// Orchestrates a single conversion run. Immutable aside from the cancel
+/// token; progress goes out via a `@Sendable` callback so the caller
+/// (live UI or queue item) decides where to surface it. Not actor-bound:
+/// it's shared with the CLI, and its file I/O (including the `defer`
+/// cleanup of every intermediate) has no business on the main thread.
+public final class EncodeJob: Sendable {
     public let spec: EncodeSpec
     public let cancelToken = CancelToken()
 
     /// `frac` is 0…1. `status` is a short human-readable label like
-    /// "Encoding chapter 3/12…" or "Remuxing (no re-encode)…".
-    public var onProgress: (Double, String) -> Void = { _, _ in }
+    /// "Encoding chapter 3/12…" or "Remuxing (no re-encode)…". Called
+    /// from whatever thread produced the progress — hop to the main
+    /// actor yourself if you're driving UI.
+    private let onProgress: @Sendable (Double, String) -> Void
 
-    public init(spec: EncodeSpec) {
+    public init(
+        spec: EncodeSpec,
+        onProgress: @escaping @Sendable (Double, String) -> Void = { _, _ in }
+    ) {
         self.spec = spec
+        self.onProgress = onProgress
     }
 
     /// Runs the encode. Returns the URL the file was actually written to
@@ -173,9 +180,7 @@ public final class EncodeJob {
                     return true
                 }
                 guard changed else { return }
-                Task { @MainActor in
-                    self.onProgress(frac, "Remuxing… \(pct)%")
-                }
+                self.onProgress(frac, "Remuxing… \(pct)%")
             },
             cancelToken: cancelToken
         )
@@ -221,18 +226,16 @@ public final class EncodeJob {
                             count += 1
                             return count
                         }
-                        await MainActor.run {
-                            self.onProgress(
-                                Double(done) / Double(totalChapters) * 0.1,
-                                "Measuring loudness — \(done)/\(totalChapters) chapters…"
-                            )
-                        }
+                        self.onProgress(
+                            Double(done) / Double(totalChapters) * 0.1,
+                            "Measuring loudness — \(done)/\(totalChapters) chapters…"
+                        )
                         if token.isCancelled { throw FFmpegRunner.RunError.cancelled }
                         return (index, lufs)
                     }
                 }
                 var slots = [Double?](repeating: nil, count: totalChapters)
-                for try await(index, lufs) in group {
+                for try await (index, lufs) in group {
                     slots[index] = lufs
                 }
                 return slots
@@ -262,7 +265,7 @@ public final class EncodeJob {
     /// Compute the per-book gain in dB needed to bring `bookLUFS` to the
     /// auto-normalize target, clamped to a sane range and rounded to one
     /// decimal place for clean ffmpeg arg readability.
-    nonisolated static func gainOffsetDB(from bookLUFS: Double) -> Double {
+    static func gainOffsetDB(from bookLUFS: Double) -> Double {
         let raw = autoNormalizeTargetLUFS - bookLUFS
         let clamped = max(
             autoNormalizeGainBounds.lowerBound,
@@ -332,10 +335,6 @@ public final class EncodeJob {
                 // for what would have been no-op UI updates.
                 let lastPct = OSAllocatedUnfairLock<Int>(initialState: -1)
 
-                // `self` is captured strongly on purpose: the job is
-                // executing `runInner` for the whole life of this group,
-                // and a weak capture is a mutable `var` in a @Sendable
-                // closure under strict concurrency.
                 group.addTask {
                     await limiter.acquire()
                     defer { Task { await limiter.release() } }
@@ -356,12 +355,10 @@ public final class EncodeJob {
                             Task {
                                 await aggregator.report(chunk: index, seconds: secs)
                                 let frac = await aggregator.phase1Fraction
-                                await MainActor.run {
-                                    self.onProgress(
-                                        frac,
-                                        "Encoding chapter \(index + 1)/\(totalChapters)…"
-                                    )
-                                }
+                                self.onProgress(
+                                    frac,
+                                    "Encoding chapter \(index + 1)/\(totalChapters)…"
+                                )
                             }
                         },
                         cancelToken: token
@@ -371,10 +368,10 @@ public final class EncodeJob {
             }
 
             var slots = [URL?](repeating: nil, count: totalChapters)
-            for try await(index, url) in group {
+            for try await (index, url) in group {
                 slots[index] = url
             }
-            return slots.compactMap { $0 }
+            return slots.compactMap(\.self)
         }
 
         // Phase 2 — concat-copy the intermediates into the final .m4b

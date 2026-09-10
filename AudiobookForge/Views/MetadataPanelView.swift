@@ -186,7 +186,7 @@ struct MetadataPanelView: View {
             // Most providers already return the cover URL from search, so
             // start the cover download in parallel with the enrich call
             // rather than waiting on enrich first.
-            async let enrichedTask = await(try? MetadataSearch.enrich(result)) ?? result
+            async let enrichedTask = await (try? MetadataSearch.enrich(result)) ?? result
             async let initialCover: Data? = {
                 guard let url = result.coverURL else { return nil }
                 return try? await MetadataSearch.fetchCover(url)

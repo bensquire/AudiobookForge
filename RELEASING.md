@@ -118,7 +118,7 @@ export APPLE_API_KEY_ID=XXXXXXXXXX
 export APPLE_API_ISSUER_ID=00000000-0000-0000-0000-000000000000
 export APPLE_API_KEY_PATH=~/Downloads/AuthKey_XXXXXXXXXX.p8
 
-brew install xcodegen create-dmg nasm pkg-config
+brew install xcodegen create-dmg pkg-config
 scripts/release.sh 0.1.0
 ```
 

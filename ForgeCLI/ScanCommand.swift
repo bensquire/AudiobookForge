@@ -34,11 +34,10 @@ struct Scan: AsyncParsableCommand {
             else { throw ScanError.rootNotADirectory(root.path) }
         }
 
-        let probe: @Sendable (URL) async -> AudioProbe.ChapterFormat
-        if noProbe {
-            probe = { _ in .none }
+        let probe: @Sendable (URL) async -> AudioProbe.ChapterFormat = if noProbe {
+            { _ in .none }
         } else {
-            probe = { url in await AudioProbe.chapterFormat(url) }
+            { url in await AudioProbe.chapterFormat(url) }
         }
         let scanner = LibraryScanner(chapterFormat: probe)
         let manifest = await scanner.scan(roots: config.libraryRootURLs)

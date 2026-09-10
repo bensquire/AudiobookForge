@@ -198,14 +198,15 @@ public final class QueueManager {
             return
         }
 
-        let job = EncodeJob(spec: item.spec)
-        job.onProgress = { [weak item] frac, label in
-            // Progress hops arrive via unstructured Tasks and can land
-            // after the job returned; don't let a late one overwrite
-            // the terminal `progress = 1` / cleared label.
-            guard let item, item.status.isRunning else { return }
-            item.progress = frac
-            item.progressLabel = label
+        let job = EncodeJob(spec: item.spec) { [weak item] frac, label in
+            Task { @MainActor in
+                // Progress arrives off-main and can land after the job
+                // returned; don't let a late hop overwrite the terminal
+                // `progress = 1` / cleared label.
+                guard let item, item.status.isRunning else { return }
+                item.progress = frac
+                item.progressLabel = label
+            }
         }
         running = (item, job)
         defer {

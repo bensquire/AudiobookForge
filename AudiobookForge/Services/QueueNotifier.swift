@@ -1,12 +1,15 @@
+import ForgeCore
 import Foundation
 import UserNotifications
 
-/// Posts a local notification when the encode queue drains. Kept out of
-/// QueueManager so unit tests never touch UserNotifications (its center
-/// requires a host app bundle and crashes in a bare test runner) — the
-/// app wires these in via QueueManager's onBatchStarted/onBatchFinished.
+/// Posts a local notification when the encode queue drains. Lives in
+/// the app target, not ForgeCore: UserNotifications needs a host app
+/// bundle (it crashes in a bare test runner and is dead weight in the
+/// CLI). The app wires it in via QueueManager's onBatchStarted /
+/// onBatchFinished; the message text itself is `QueueSummary` in core so
+/// it stays unit-testable.
 @MainActor
-public enum QueueNotifier {
+enum QueueNotifier {
     /// Without a delegate macOS silently swallows notifications while
     /// the app is frontmost; this one opts into showing them anyway.
     /// UNUserNotificationCenter holds its delegate weakly, so keep the
@@ -14,13 +17,13 @@ public enum QueueNotifier {
     private static let presenter = ForegroundPresenter()
 
     /// Call once at app startup, before any notification is requested.
-    public static func install() {
+    static func install() {
         UNUserNotificationCenter.current().delegate = presenter
     }
 
     /// Ask once, at the moment the user kicks off long-running work.
     /// Safe to call repeatedly — the system remembers the answer.
-    public static func requestAuthorization() {
+    static func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound]
         ) { granted, error in
@@ -34,10 +37,10 @@ public enum QueueNotifier {
         }
     }
 
-    public static func queueDrained(succeeded: Int, failed: Int) {
+    static func queueDrained(succeeded: Int, failed: Int) {
         let content = UNMutableNotificationContent()
         content.title = "Audiobook queue finished"
-        content.body = summary(succeeded: succeeded, failed: failed)
+        content.body = QueueSummary.text(succeeded: succeeded, failed: failed)
         content.sound = .default
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(
@@ -60,17 +63,6 @@ public enum QueueNotifier {
             @escaping (UNNotificationPresentationOptions) -> Void
         ) {
             completionHandler([.banner, .sound])
-        }
-    }
-
-    /// "3 books encoded" / "2 books encoded, 1 failed" / "1 book failed".
-    /// Pure so it's unit-testable without a notification center.
-    public nonisolated static func summary(succeeded: Int, failed: Int) -> String {
-        let book = { (n: Int) in n == 1 ? "1 book" : "\(n) books" }
-        switch (succeeded, failed) {
-        case (_, 0): return "\(book(succeeded)) encoded"
-        case (0, _): return "\(book(failed)) failed"
-        default: return "\(book(succeeded)) encoded, \(failed) failed"
         }
     }
 }

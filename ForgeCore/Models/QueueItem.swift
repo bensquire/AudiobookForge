@@ -1,9 +1,13 @@
 import Foundation
 import Observation
 
+/// One row of the encode queue. Main-actor bound: it is UI state that the
+/// queue worker mutates and the views observe, and the binding is what
+/// lets a progress callback from a background thread capture it safely.
+@MainActor
 @Observable
 public final class QueueItem: Identifiable {
-    public enum Status: Equatable {
+    public enum Status: Equatable, Sendable {
         case pending
         case running
         case succeeded

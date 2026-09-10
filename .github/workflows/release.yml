@@ -56,7 +56,7 @@ jobs:
           echo "Version=$VERSION  Numeric=$NUMERIC_VERSION  Build=$BUILD  Prerelease=$IS_PRERELEASE"
 
       - name: Install build tools
-        run: brew install xcodegen create-dmg nasm pkg-config
+        run: brew install xcodegen create-dmg pkg-config
 
       - name: Cache bundled ffmpeg
         id: cache-ffmpeg

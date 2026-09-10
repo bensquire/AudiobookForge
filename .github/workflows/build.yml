@@ -23,7 +23,7 @@ jobs:
           xcode-version: "26.6"
 
       - name: Install build tools
-        run: brew install xcodegen nasm pkg-config
+        run: brew install xcodegen pkg-config
 
       # SwiftFormat / SwiftLint come from pinned release binaries, not
       # brew: the runner image preinstalls whatever it was built with,

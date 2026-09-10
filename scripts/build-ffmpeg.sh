@@ -21,7 +21,7 @@ set -euo pipefail
 
 # ---- pinned versions -------------------------------------------------------
 
-FFMPEG_VERSION="8.1.2"
+FFMPEG_VERSION="9.0.1"
 FDK_AAC_VERSION="2.0.3"
 MACOS_MIN="14.0"
 
@@ -45,11 +45,11 @@ rm -f "$OUT_DIR/ffmpeg"
 
 # ---- toolchain -------------------------------------------------------------
 
-# nasm is needed by fdk-aac's x86 path (not used here on arm64, but the
-# configure script still checks for it on macOS unless --disable-asm-x86
-# is honoured). We just install it to be safe — fdk-aac is tiny either way.
+# Only pkg-config is needed: neither fdk-aac nor an arm64 ffmpeg uses
+# nasm (that's the x86 assembler), verified by building with nasm
+# shadowed off PATH.
 need_brew=()
-for cmd in pkg-config nasm; do
+for cmd in pkg-config; do
   if ! command -v "$cmd" >/dev/null; then need_brew+=("$cmd"); fi
 done
 if [[ ${#need_brew[@]} -gt 0 ]]; then

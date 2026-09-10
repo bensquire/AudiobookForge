@@ -42,8 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     override init() {
         queue = QueueManager()
-        // Wired here rather than inside QueueManager so unit tests never
-        // touch UserNotifications (needs a host app bundle).
+        // Wired here rather than inside QueueManager so ForgeCore (and
+        // its tests, and the CLI) never touch UserNotifications.
         QueueNotifier.install()
         queue.onBatchStarted = { QueueNotifier.requestAuthorization() }
         queue.onBatchFinished = { succeeded, failed in

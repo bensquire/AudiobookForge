@@ -72,12 +72,12 @@ public enum MetadataSearch {
             // preserves that priority when iTunes returns the same title.
             async let audnex = attempt { try await audnexusSearch(query: query) }
             async let itunes = attempt { try await itunesSearch(query: query) }
-            let outcomes = await[audnex, itunes]
+            let outcomes = await [audnex, itunes]
             let successes = outcomes.compactMap { try? $0.get() }
             if successes.isEmpty, case let .failure(error) = outcomes[0] {
                 throw error
             }
-            results = successes.flatMap { $0 }
+            results = successes.flatMap(\.self)
         }
         var seen = Set<String>()
         return results.filter { seen.insert(($0.title + "|" + $0.author).lowercased()).inserted }
@@ -166,7 +166,7 @@ public enum MetadataSearch {
 
 // MARK: - Audnexus DTOs
 
-private struct AudnexusBook: Decodable {
+struct AudnexusBook: Decodable {
     let asin: String
     let title: String
     let authors: [Named]?
@@ -184,7 +184,7 @@ private struct AudnexusBook: Decodable {
     }
 }
 
-private extension MetadataSearchResult {
+extension MetadataSearchResult {
     init(audnexus book: AudnexusBook) {
         self.init(
             id: book.asin,
@@ -219,11 +219,11 @@ private extension MetadataSearchResult {
 
 // MARK: - iTunes DTOs
 
-private struct ITunesEnvelope: Decodable {
+struct ITunesEnvelope: Decodable {
     let results: [ITunesResult]
 }
 
-private struct ITunesResult: Decodable {
+struct ITunesResult: Decodable {
     let collectionId: Int?
     let collectionName: String?
     let artistName: String?
@@ -232,7 +232,7 @@ private struct ITunesResult: Decodable {
     let artworkUrl100: String?
 }
 
-private extension MetadataSearchResult {
+extension MetadataSearchResult {
     init(itunes r: ITunesResult) {
         // Bump artwork up from the default 100x100 thumbnail.
         let art = r.artworkUrl100?.replacingOccurrences(of: "100x100bb", with: "600x600bb")
