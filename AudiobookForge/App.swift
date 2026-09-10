@@ -24,11 +24,31 @@ struct AudiobookForgeApp: App {
                 .onChange(of: project.settings) { oldSettings, newSettings in
                     SettingsStore.save(newSettings, previous: oldSettings)
                 }
+                // Sandbox grants are taken when a URL is picked and are
+                // owed a stop; here is the one place that can see
+                // everything still referring to one, so the sweep lives
+                // here rather than at each site that drops a reference.
+                .onChange(of: scopedURLsInUse) { _, inUse in
+                    SecurityScope.releaseUnused(keeping: inUse)
+                }
         }
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
+    }
+
+    /// Every picked URL the app still refers to: the draft's chapters and
+    /// output folder, and the same for each queued item, which outlives
+    /// the draft it came from.
+    private var scopedURLsInUse: Set<URL> {
+        var urls = Set(project.chapters.map(\.sourceURL))
+        if let outputDirectory = project.settings.outputDirectory { urls.insert(outputDirectory) }
+        for item in appDelegate.queue.items {
+            urls.formUnion(item.spec.chapters.map(\.sourceURL))
+            if let outputDirectory = item.spec.settings.outputDirectory { urls.insert(outputDirectory) }
+        }
+        return urls
     }
 }
 
@@ -53,9 +73,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard queue.isProcessing else { return .terminateNow }
+        guard queue.isProcessing else {
+            SecurityScope.releaseAll()
+            return .terminateNow
+        }
         Task {
             await queue.shutdown()
+            // After the encodes have stopped, so nothing loses access to
+            // a file it is still reading.
+            SecurityScope.releaseAll()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
