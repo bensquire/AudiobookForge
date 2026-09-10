@@ -1,0 +1,7 @@
+#!/bin/zsh
+# Pre-commit: lint + the whole suite (enable with: git config core.hooksPath .githooks)
+# Delegates to the scripts so the commands have one home.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+scripts/lint.sh
+scripts/test.sh

@@ -119,6 +119,12 @@ scripts/
 .github/workflows/
 ├── build.yml                  # CI: lint, unsigned build, CLI build, tests on every push
 └── release.yml                # tagged releases: sign, notarize, DMG, GitHub Release
+CLAUDE.md                      # what the project is, its promises, and where everything lives
+.claude/
+├── rules/                     # one engineering rule per file; README.md there is the index
+├── hooks/                     # format, lint and measure every Swift file as it is edited
+└── skills/                    # run-app (drive the UI end to end), apple-docs (offline Apple docs)
+.githooks/pre-commit           # lint + suite before each commit: git config core.hooksPath .githooks
 ```
 
 ## The `forge` CLI
