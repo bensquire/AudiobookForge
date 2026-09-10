@@ -104,7 +104,9 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           mkdir -p build
-          envsubst < scripts/ExportOptions.plist > build/ExportOptions.plist
+          # sed, not envsubst: envsubst comes from gettext, which is not
+          # part of macOS and is not guaranteed on the runner image.
+          sed "s|\${TEAM_ID}|$TEAM_ID|g" scripts/ExportOptions.plist > build/ExportOptions.plist
 
       - name: Archive
         env:

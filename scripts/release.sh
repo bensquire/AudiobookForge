@@ -32,7 +32,7 @@ rm -rf "$ARCHIVE" "$EXPORT_DIR"
 # ---- ExportOptions rendered with the real team ID
 EXPORT_OPTS="$BUILD_DIR/ExportOptions.rendered.plist"
 mkdir -p "$BUILD_DIR"
-TEAM_ID="$APPLE_TEAM_ID" envsubst < scripts/ExportOptions.plist > "$EXPORT_OPTS"
+sed "s|\${TEAM_ID}|$APPLE_TEAM_ID|g" scripts/ExportOptions.plist > "$EXPORT_OPTS"
 
 # ---- Ensure ffmpeg binaries are present
 bash scripts/build-ffmpeg.sh
