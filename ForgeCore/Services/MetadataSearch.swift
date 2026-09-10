@@ -4,7 +4,7 @@ import Foundation
 /// mirror used by Audiobookshelf/Plex). iTunes Search API is the fallback
 /// for non-Audible titles.
 public enum MetadataSearch {
-    public enum Provider: String, CaseIterable, Identifiable {
+    public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case audnexus
         case itunes
         case all
@@ -22,29 +22,62 @@ public enum MetadataSearch {
         }
     }
 
-    public enum SearchError: Error, LocalizedError {
+    public enum SearchError: Error, LocalizedError, Equatable {
         case badResponse
+        case httpStatus(Int)
+        case insecureURL(URL)
+        case coverTooLarge(Int)
+
         public var errorDescription: String? {
             switch self {
             case .badResponse: "Unexpected response from metadata server"
+            case let .httpStatus(code): "Metadata server returned HTTP \(code)"
+            case let .insecureURL(url): "Refusing non-HTTPS metadata URL: \(url.absoluteString)"
+            case let .coverTooLarge(bytes):
+                "Cover image is too large (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)))"
             }
         }
     }
 
-    public static func search(query: String, provider: Provider = .all) async throws -> [MetadataSearchResult] {
+    /// Covers bigger than this are almost certainly not artwork (or are
+    /// a hostile response); ImageIO would happily try to decode them.
+    static let maxCoverBytes = 20 * 1024 * 1024
+
+    /// Short per-request timeout — the shared session's 60 s default
+    /// leaves the search button spinning for a minute when a provider
+    /// is down. Ephemeral so nothing is persisted between launches.
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
+    /// One provider's failure is an error the user should see (offline,
+    /// provider down) — not an empty result list. With `.all`, a single
+    /// provider failing is tolerated as long as the other answered.
+    public static func search(query: String,
+                              provider: Provider = .all) async throws -> [MetadataSearchResult]
+    {
         let results: [MetadataSearchResult]
         switch provider {
         case .audnexus:
-            results = await (try? audnexusSearch(query: query)) ?? []
+            results = try await audnexusSearch(query: query)
         case .itunes:
-            results = await (try? itunesSearch(query: query)) ?? []
+            results = try await itunesSearch(query: query)
         case .all:
             // Audnexus first in the merged list because it's the higher-
             // quality source for audiobooks specifically; Set.insert
             // preserves that priority when iTunes returns the same title.
-            async let audnex = await (try? audnexusSearch(query: query)) ?? []
-            async let itunes = await (try? itunesSearch(query: query)) ?? []
-            results = await audnex + itunes
+            async let audnex = attempt { try await audnexusSearch(query: query) }
+            async let itunes = attempt { try await itunesSearch(query: query) }
+            let outcomes = await[audnex, itunes]
+            let successes = outcomes.compactMap { try? $0.get() }
+            if successes.isEmpty, case let .failure(error) = outcomes[0] {
+                throw error
+            }
+            results = successes.flatMap { $0 }
         }
         var seen = Set<String>()
         return results.filter { seen.insert(($0.title + "|" + $0.author).lowercased()).inserted }
@@ -53,36 +86,79 @@ public enum MetadataSearch {
     /// Fetch the full Audnexus record for richer description, full
     /// narrator list, and a higher-res cover URL.
     public static func enrich(_ result: MetadataSearchResult) async throws -> MetadataSearchResult {
-        guard result.source == .audnexus else { return result }
+        // The id came from the provider, not the user, but it still lands
+        // in a URL path — accept only a well-formed ASIN so a hostile
+        // record can't redirect us to `../authors/…`.
+        guard result.source == .audnexus, isASIN(result.id) else { return result }
         let url = URL(string: "https://api.audnex.us/books/\(result.id)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await fetch(url)
         let book = try JSONDecoder().decode(AudnexusBook.self, from: data)
         return result.merging(book)
     }
 
     public static func fetchCover(_ url: URL) async throws -> Data {
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await fetch(url)
+        guard data.count <= maxCoverBytes else { throw SearchError.coverTooLarge(data.count) }
         return data
+    }
+
+    /// `Result(catching:)` for an async body — the stdlib overload isn't
+    /// available in Swift 5 language mode.
+    private static func attempt(
+        _ body: () async throws -> [MetadataSearchResult]
+    ) async -> Result<[MetadataSearchResult], Error> {
+        do {
+            return try await .success(body())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    // MARK: - Transport
+
+    /// GET `url` and return the body only for a 2xx response over HTTPS.
+    /// Provider cover URLs arrive as strings from the network, so the
+    /// scheme is enforced here rather than trusted.
+    static func fetch(_ url: URL) async throws -> Data {
+        guard url.scheme?.lowercased() == "https" else { throw SearchError.insecureURL(url) }
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse else { throw SearchError.badResponse }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw SearchError.httpStatus(http.statusCode)
+        }
+        return data
+    }
+
+    static func isASIN(_ s: String) -> Bool {
+        s.count == 10 && s.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
+    }
+
+    /// `URLComponents` leaves `+` bare in query values, which both
+    /// providers decode as a space — "C++" would search for "C  ".
+    static func url(_ base: String, query: [(String, String)]) -> URL {
+        var comps = URLComponents(string: base)!
+        comps.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
+        comps.percentEncodedQuery = comps.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
+        return comps.url!
     }
 
     // MARK: - Providers
 
     private static func audnexusSearch(query: String) async throws -> [MetadataSearchResult] {
-        var comps = URLComponents(string: "https://api.audnex.us/books")!
-        comps.queryItems = [URLQueryItem(name: "name", value: query)]
-        let (data, _) = try await URLSession.shared.data(from: comps.url!)
-        let books = (try? JSONDecoder().decode([AudnexusBook].self, from: data)) ?? []
+        let url = url("https://api.audnex.us/books", query: [("name", query)])
+        let data = try await fetch(url)
+        let books = try JSONDecoder().decode([AudnexusBook].self, from: data)
         return books.map(MetadataSearchResult.init(audnexus:))
     }
 
     private static func itunesSearch(query: String) async throws -> [MetadataSearchResult] {
-        var comps = URLComponents(string: "https://itunes.apple.com/search")!
-        comps.queryItems = [
-            URLQueryItem(name: "term", value: query),
-            URLQueryItem(name: "media", value: "audiobook"),
-            URLQueryItem(name: "limit", value: "10")
-        ]
-        let (data, _) = try await URLSession.shared.data(from: comps.url!)
+        let url = url("https://itunes.apple.com/search", query: [
+            ("term", query),
+            ("media", "audiobook"),
+            ("limit", "10")
+        ])
+        let data = try await fetch(url)
         let envelope = try JSONDecoder().decode(ITunesEnvelope.self, from: data)
         return envelope.results.map(MetadataSearchResult.init(itunes:))
     }

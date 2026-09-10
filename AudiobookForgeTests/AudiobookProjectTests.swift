@@ -170,4 +170,32 @@ final class AudiobookProjectTests: XCTestCase {
             channels: 2
         )
     }
+
+    // MARK: - hasDraftWork
+
+    func test_hasDraftWork_falseOnEmptyDraft() {
+        XCTAssertFalse(AudiobookProject().hasDraftWork)
+    }
+
+    func test_hasDraftWork_trueWithChaptersButNoMetadata() {
+        // Arrange — the case `canEnqueue` is false for but a reset would
+        // still throw away real work.
+        let p = AudiobookProject()
+        p.chapters = [
+            Chapter(
+                sourceURL: URL(fileURLWithPath: "/tmp/x.mp3"),
+                title: "t", duration: 1, codec: .mp3, sampleRate: 44100, channels: 1
+            )
+        ]
+
+        // Assert
+        XCTAssertTrue(p.hasDraftWork)
+        XCTAssertFalse(p.canEnqueue)
+    }
+
+    func test_hasDraftWork_trueWithOnlyACover() {
+        let p = AudiobookProject()
+        p.metadata.coverData = Data([0xFF, 0xD8])
+        XCTAssertTrue(p.hasDraftWork)
+    }
 }

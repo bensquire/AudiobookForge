@@ -11,7 +11,7 @@ import Foundation
 /// the codec context's `bit_rate` directly, so we shell out for that
 /// number and use AVFoundation for everything else.
 public enum AudioProbe {
-    public struct Probed {
+    public struct Probed: Sendable {
         public var title: String?
         public var artist: String?
         public var album: String?
@@ -72,7 +72,7 @@ public enum AudioProbe {
             }
         }
 
-        for item in await (meta) ?? [] {
+        for item in await(meta) ?? [] {
             guard let key = item.commonKey?.rawValue else { continue }
             switch key {
             case AVMetadataKey.commonKeyTitle.rawValue:
@@ -86,7 +86,7 @@ public enum AudioProbe {
             }
         }
 
-        for item in await (id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
+        for item in await(id3) ?? [] where item.identifier == .id3MetadataTrackNumber {
             if let s = try? await item.load(.stringValue) {
                 probed.trackNumber = Int(s.split(separator: "/").first.map(String.init) ?? s)
             }
@@ -156,7 +156,8 @@ public enum AudioProbe {
         return stderr.flatMap(parseBitrateFromFFmpegBanner)
     }
 
-    private static let kbpsPattern = /(\d+)\s*kb\/s/
+    /// `Regex` isn't Sendable but this one is immutable and only read.
+    private nonisolated(unsafe) static let kbpsPattern = /(\d+)\s*kb\/s/
 
     /// Parse `Audio: …, N kb/s` from ffmpeg's stderr banner. Exposed
     /// (internal scope) so AudioProbeBitrateParseTests can pin the

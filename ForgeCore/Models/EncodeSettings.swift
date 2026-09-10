@@ -1,7 +1,7 @@
 import Foundation
 
-public struct EncodeSettings: Equatable {
-    public enum Bitrate: String, CaseIterable, Identifiable {
+public struct EncodeSettings: Equatable, Sendable {
+    public enum Bitrate: String, CaseIterable, Identifiable, Codable, Sendable {
         case k32 = "32k"
         case k64 = "64k"
         case k96 = "96k"
@@ -28,6 +28,24 @@ public struct EncodeSettings: Equatable {
             case .source: nil
             }
         }
+
+        /// Parse a human spelling from config files / CLI flags:
+        /// `source`, `match`, `64k`, `64`, `64kbps`, `64 kbps`. Case-
+        /// and whitespace-insensitive. Nil for anything else — callers
+        /// should reject the config rather than fall back silently.
+        public init?(userSpelling raw: String) {
+            let s = raw.lowercased().filter { !$0.isWhitespace }
+            if s == "source" || s == "match" || s == "matchsource" {
+                self = .source
+                return
+            }
+            let digits = s.prefix { $0.isNumber }
+            let unit = s.dropFirst(digits.count)
+            guard !digits.isEmpty, ["", "k", "kb", "kbps", "kbit", "kbit/s"].contains(unit),
+                  let match = Self.allCases.first(where: { $0.kbps.map { String($0) } == String(digits) })
+            else { return nil }
+            self = match
+        }
     }
 
     /// Optional per-book loudness adjustment applied during encoding.
@@ -36,7 +54,7 @@ public struct EncodeSettings: Equatable {
     /// applies a single computed gain to all chapters. Either way the
     /// remux fast-path is disabled because we have to re-encode to
     /// touch samples.
-    public enum GainBoost: String, CaseIterable, Identifiable, Equatable {
+    public enum GainBoost: String, CaseIterable, Identifiable, Equatable, Codable, Sendable {
         case off
         case dB3
         case dB6
@@ -84,10 +102,38 @@ public struct EncodeSettings: Equatable {
             default: label
             }
         }
+
+        /// Parse a human spelling from config files / CLI flags: `off`,
+        /// `none`, `auto`, `auto-normalize`, `normalize`, `6`, `+6`,
+        /// `6dB`, `+6 dB`. Only the fixed steps the app offers are
+        /// accepted — `+5` is nil, not rounded. Case-, sign-, and
+        /// whitespace-insensitive.
+        public init?(userSpelling raw: String) {
+            let s = raw.lowercased().filter { !$0.isWhitespace && $0 != "-" && $0 != "_" }
+            switch s {
+            case "off", "none", "0", "0db":
+                self = .off
+                return
+            case "auto", "autonormalize", "autonormalise", "normalize", "normalise":
+                self = .autoNormalize
+                return
+            default:
+                break
+            }
+            let trimmed = s.hasPrefix("+") ? String(s.dropFirst()) : s
+            let digits = trimmed.prefix { $0.isNumber }
+            let unit = trimmed.dropFirst(digits.count)
+            guard !digits.isEmpty, unit == "" || unit == "db",
+                  let match = Self.allCases.first(where: { $0.manualDB.map { String($0) } == String(digits) })
+            else { return nil }
+            self = match
+        }
     }
 
     public var bitrate: Bitrate = .source
     public var gainBoost: GainBoost = .off
     public var outputDirectory: URL?
     public var filenameTemplate: String = "{author}/{title}/{title}.m4b"
+
+    public init() {}
 }

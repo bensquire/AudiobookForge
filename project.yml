@@ -8,20 +8,28 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.10"
+    # Language mode. Xcode maps anything 5.x to `-swift-version 5`, so
+    # "5.10" was cosmetic. Strict-concurrency migration → "6" later.
+    SWIFT_VERSION: "5"
+    # Enforce Sendable / actor-isolation checking now (as warnings in
+    # Swift 5 mode) so the Swift 6 flip is a one-line change later.
+    SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "1.3.0"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
 
+# Pinned exactly: Package.resolved is gitignored (the xcodeproj is
+# generated), so `from:` would let every CI release re-resolve to
+# whatever upstream shipped that morning. Bump deliberately.
 packages:
   ArgumentParser:
     url: https://github.com/apple/swift-argument-parser
-    from: 1.3.0
+    exactVersion: 1.8.2
   Yams:
     url: https://github.com/jpsim/Yams
-    from: 5.1.0
+    exactVersion: 6.2.2
 
 targets:
   # Headless core: probing, import rules, metadata, encoding, queue.
@@ -61,6 +69,11 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: NO
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO
+        # Embed a generated Info.plist in the binary's __TEXT segment so
+        # `forge --version` reads MARKETING_VERSION instead of carrying
+        # its own copy of the number.
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
 
   AudiobookForge:
     type: application
@@ -169,6 +182,10 @@ targets:
       testTargets:
         - AudiobookForgeTests
 
+  # Links ForgeCore directly and is NOT hosted in the app. Hosting would
+  # link the static archive twice (once in the app, once here) — two
+  # copies of every static cache and an ObjC "class implemented in both"
+  # warning at launch. Nothing under test needs AppKit or the bundle.
   AudiobookForgeTests:
     type: bundle.unit-test
     platform: macOS
@@ -176,7 +193,6 @@ targets:
     sources:
       - path: AudiobookForgeTests
     dependencies:
-      - target: AudiobookForge
       - target: ForgeCore
     settings:
       base:

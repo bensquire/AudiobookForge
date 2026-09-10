@@ -71,7 +71,13 @@ enum ChapterBuilder {
     }
 
     private static func kv(_ key: String, _ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Pasted descriptions arrive with CRLF / lone CR line endings;
+        // ffmetadata only knows `\n`, so a raw `\r` would land verbatim
+        // in the desc / ©cmt atoms.
+        let trimmed = value
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         // FFMETADATA escapes: =, ;, #, \, and newline.
         let escaped = trimmed

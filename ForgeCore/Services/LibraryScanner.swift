@@ -74,7 +74,8 @@ public struct LibraryScanner {
     /// for "already forged".
     private static let mp4Extensions: Set<String> = ["m4a", "m4b", "aac"]
 
-    private static let discFolderPattern = /^(disc|disk|cd)\W*\d*$/.ignoresCase()
+    /// `Regex` isn't Sendable but this one is immutable and only read.
+    private nonisolated(unsafe) static let discFolderPattern = /^(disc|disk|cd)\W*\d*$/.ignoresCase()
 
     private let chapterFormat: ChapterProbe
 
@@ -89,7 +90,7 @@ public struct LibraryScanner {
         for root in roots {
             let groups = Self.discoverBooks(under: root)
             for group in groups {
-                books.append(await classify(group))
+                await books.append(classify(group))
             }
         }
         books.sort { $0.path < $1.path }

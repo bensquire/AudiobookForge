@@ -190,9 +190,11 @@ private struct QueueRow: View {
     }
 
     /// Either show the confirm dialog (if the prep area has work) or
-    /// apply the hydrate immediately.
+    /// apply the hydrate immediately. Gated on `hasDraftWork`, not
+    /// `canEnqueue` — a 50-file drop with no title yet is still worth
+    /// asking about before it's wiped.
     private func requestHydrate(mode: HydrateMode) {
-        if project.canEnqueue {
+        if project.hasDraftWork {
             pendingMode = mode
         } else {
             applyHydrate(mode: mode)

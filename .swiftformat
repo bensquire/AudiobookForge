@@ -5,7 +5,7 @@
 #   scripts/format.sh   # writes changes
 #   scripts/lint.sh     # checks only, exits non-zero on diff
 
---swiftversion 5.10
+--swiftversion 5
 
 # Indentation / width
 --indent 4

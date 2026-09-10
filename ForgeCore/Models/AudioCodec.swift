@@ -5,7 +5,7 @@ import Foundation
 /// `'aac '` (with trailing space) — comparing against the raw string is
 /// fragile; an enum gives us safety and a place to hang
 /// codec-specific decisions (e.g. "is this MP4-compatible for remux").
-public enum AudioCodec: Hashable {
+public enum AudioCodec: Hashable, Sendable {
     case aac
     case aacHE
     case aacHEv2

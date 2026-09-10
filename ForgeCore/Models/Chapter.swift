@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Chapter: Identifiable, Hashable {
+public struct Chapter: Identifiable, Hashable, Sendable {
     public let id = UUID()
     public var sourceURL: URL
     public var title: String

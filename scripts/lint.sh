@@ -6,6 +6,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Prefer the pinned tool binaries from scripts/install-lint-tools.sh
+# (what CI runs) over whatever brew happens to have installed.
+if [[ -d "$ROOT/build/tools/bin" ]]; then
+  export PATH="$ROOT/build/tools/bin:$PATH"
+fi
+
 missing=()
 command -v swiftformat >/dev/null || missing+=("swiftformat")
 command -v swiftlint   >/dev/null || missing+=("swiftlint")
@@ -17,11 +23,11 @@ fi
 
 echo "==> swiftformat (lint mode)"
 # Newer SwiftFormat treats `--lint` as a flag-only; paths come first.
-swiftformat AudiobookForge AudiobookForgeTests --lint
+swiftformat AudiobookForge AudiobookForgeTests ForgeCore ForgeCLI --lint
 
 echo
 echo "==> swiftlint"
-swiftlint --strict --quiet AudiobookForge AudiobookForgeTests
+swiftlint --strict --quiet AudiobookForge AudiobookForgeTests ForgeCore ForgeCLI
 
 echo
 echo "Lint clean."

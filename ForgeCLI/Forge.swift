@@ -7,11 +7,14 @@ struct Forge: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forge",
         abstract: "Batch audiobook pipeline: scan a library, plan work, forge m4bs.",
-        version: "0.1.0",
+        // Read from the Info.plist section xcodebuild embeds in the binary
+        // (see project.yml), so app and CLI share one version number.
+        version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "dev",
         subcommands: [Scan.self]
     )
 
-    public static func main() async {
+    static func main() async {
         // A bare tool has no app bundle to resolve the bundled ffmpeg
         // from — let the environment point at one (e.g. the repo's
         // Resources/bin, or the installed app's bundle).

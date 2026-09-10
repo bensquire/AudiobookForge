@@ -226,18 +226,6 @@ final class ParallelEncodeTests: XCTestCase {
     }
 }
 
-// MARK: - Test helpers
-
-private extension [String] {
-    /// Returns the value that immediately follows the given key in a
-    /// flat `["-flag", "value", …]` argv list. Returns nil if the key
-    /// isn't present or has no following value.
-    subscript(adjacent key: String) -> String? {
-        guard let i = firstIndex(of: key), i + 1 < count else { return nil }
-        return self[i + 1]
-    }
-}
-
 /// Test-side counter for the cap invariant. Each task `entered`s on
 /// acquire and `left`s on release; `maxConcurrent` records the peak.
 private actor ConcurrencyWatcher {

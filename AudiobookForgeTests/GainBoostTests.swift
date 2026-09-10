@@ -320,12 +320,3 @@ final class GainBoostTests: XCTestCase {
         )
     }
 }
-
-/// Shared with ParallelEncodeTests; redeclared here as fileprivate so we
-/// don't need to alter visibility in the existing test file.
-private extension [String] {
-    subscript(adjacent key: String) -> String? {
-        guard let i = firstIndex(of: key), i + 1 < count else { return nil }
-        return self[i + 1]
-    }
-}

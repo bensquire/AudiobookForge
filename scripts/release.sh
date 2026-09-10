@@ -6,7 +6,7 @@
 #   - Developer ID Application cert installed in your login keychain
 #   - $APPLE_TEAM_ID, $APPLE_API_KEY_ID, $APPLE_API_ISSUER_ID,
 #     $APPLE_API_KEY_PATH set in your shell (see RELEASING.md)
-#   - brew install xcodegen create-dmg
+#   - brew install xcodegen create-dmg nasm pkg-config
 #
 # Usage:
 #   scripts/release.sh 0.1.0

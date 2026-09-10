@@ -9,10 +9,13 @@ public final class QueueManager {
     public var items: [QueueItem] = []
 
     private var running: (item: QueueItem, job: EncodeJob)?
-    private var pumpWakeup: CheckedContinuation<Void, Never>?
-    /// nonisolated(unsafe) so deinit (nonisolated) can cancel it;
-    /// Task.cancel() is thread-safe and the property is written once.
-    private nonisolated(unsafe) var pumpTask: Task<Void, Never>?
+    /// The worker parks on this stream between batches. Yielding wakes
+    /// it; finishing it (deinit / `shutdown()`) ends the loop. The
+    /// worker holds `self` only while draining, so an idle manager can
+    /// actually be deallocated — a parked `CheckedContinuation` inside a
+    /// method on `self` never could.
+    private let wake: AsyncStream<Void>.Continuation
+    private var pumpTask: Task<Void, Never>?
 
     /// Held while a batch is being processed. Keeps the system awake and
     /// exempts us from App Nap — a multi-hour encode with the window
@@ -35,13 +38,36 @@ public final class QueueManager {
     }
 
     public init() {
+        let (stream, continuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        wake = continuation
         pumpTask = Task { @MainActor [weak self] in
-            await self?.pumpLoop()
+            for await _ in stream {
+                guard let self else { return }
+                await drain()
+            }
         }
     }
 
     deinit {
+        wake.finish()
+    }
+
+    /// Stop everything for app termination: pending items are cancelled,
+    /// the running ffmpeg children are terminated, and this returns once
+    /// the worker has unwound — so `.partial` files and the work
+    /// directory are cleaned up before the process exits rather than
+    /// orphaned with ffmpeg still writing into them.
+    public func shutdown() async {
+        for item in items where item.status.isPending {
+            item.status = .cancelled
+        }
+        running?.job.cancelToken.cancel()
+        wake.finish()
         pumpTask?.cancel()
+        await pumpTask?.value
+        pumpTask = nil
     }
 
     // MARK: - Public API
@@ -127,16 +153,13 @@ public final class QueueManager {
 
     // MARK: - Worker loop
 
-    private func pumpLoop() async {
-        while !Task.isCancelled {
-            guard let next = items.first(where: { $0.status.isPending }) else {
-                finishBatch()
-                await waitForWork()
-                continue
-            }
+    /// Run every pending item to completion, then close the batch.
+    private func drain() async {
+        while !Task.isCancelled, let next = items.first(where: { $0.status.isPending }) {
             startBatchIfNeeded()
             await process(next)
         }
+        finishBatch()
     }
 
     private func startBatchIfNeeded() {
@@ -159,17 +182,8 @@ public final class QueueManager {
         batchFailed = 0
     }
 
-    private func waitForWork() async {
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            self.pumpWakeup = cont
-        }
-    }
-
     private func wakePump() {
-        if let cont = pumpWakeup {
-            pumpWakeup = nil
-            cont.resume()
-        }
+        wake.yield()
     }
 
     private func process(_ item: QueueItem) async {
@@ -186,7 +200,10 @@ public final class QueueManager {
 
         let job = EncodeJob(spec: item.spec)
         job.onProgress = { [weak item] frac, label in
-            guard let item else { return }
+            // Progress hops arrive via unstructured Tasks and can land
+            // after the job returned; don't let a late one overwrite
+            // the terminal `progress = 1` / cleared label.
+            guard let item, item.status.isRunning else { return }
             item.progress = frac
             item.progressLabel = label
         }

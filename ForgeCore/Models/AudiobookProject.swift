@@ -29,6 +29,15 @@ public final class AudiobookProject {
             && settings.outputDirectory != nil
     }
 
+    /// Anything the user has put into the prep area that a reset would
+    /// throw away. Looser than `canEnqueue`: a folder of chapters with
+    /// no title yet is still work worth a confirmation dialog.
+    public var hasDraftWork: Bool {
+        !chapters.isEmpty
+            || !metadata.isEmpty
+            || metadata.coverData != nil
+    }
+
     /// Clear chapters + metadata so the prep area is ready for the next
     /// book. We deliberately preserve `settings` (output dir, codec,
     /// bitrate, filename template) so the user doesn't have to re-pick

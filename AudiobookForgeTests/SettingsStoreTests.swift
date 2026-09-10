@@ -3,7 +3,8 @@ import XCTest
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
-    private var defaults: UserDefaults!
+    // nonisolated(unsafe): see QueueTestSupport — XCTest setUp/tearDown are nonisolated.
+    private nonisolated(unsafe) var defaults: UserDefaults!
     private let suite = "SettingsStoreTests"
 
     override func setUp() {

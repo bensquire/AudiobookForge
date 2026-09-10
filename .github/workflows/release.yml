@@ -19,16 +19,18 @@ permissions:
 jobs:
   release:
     name: Build, sign, notarize, publish
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # for git rev-list --count
 
+      # Pinned, not latest-stable: a new Xcode landing on the image must
+      # not silently change the toolchain a release is built with.
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: "26.6"
 
       - name: Resolve version
         id: ver
@@ -58,7 +60,7 @@ jobs:
 
       - name: Cache bundled ffmpeg
         id: cache-ffmpeg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: AudiobookForge/Resources/bin
           key: ffmpeg-arm64-${{ hashFiles('scripts/build-ffmpeg.sh') }}
@@ -251,7 +253,7 @@ jobs:
             $PRERELEASE_FLAG
 
       - name: Upload artifact (for manual inspection)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AudiobookForge-${{ steps.ver.outputs.version }}-dmg
           path: dist/AudiobookForge-${{ steps.ver.outputs.version }}.dmg

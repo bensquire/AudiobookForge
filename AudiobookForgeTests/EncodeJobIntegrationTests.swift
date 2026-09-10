@@ -9,16 +9,14 @@ import XCTest
 /// AVFoundation (duration, chapter markers, book metadata).
 @MainActor
 final class EncodeJobIntegrationTests: XCTestCase {
-    private var tmp: URL!
-
-    private static let repoBinDir = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent() // AudiobookForgeTests/
-        .deletingLastPathComponent() // repo root
-        .appendingPathComponent("AudiobookForge/Resources/bin")
+    // nonisolated(unsafe): XCTest's setUp/tearDown are nonisolated even
+    // on a @MainActor test class, and the fixture is only touched there
+    // and from the (main-actor) test bodies, always serially.
+    private nonisolated(unsafe) var tmp: URL!
 
     override func setUp() {
         super.setUp()
-        Bundled.setOverrideDirectory(Self.repoBinDir)
+        Bundled.setOverrideDirectory(repoBinDir)
         // swiftlint:disable:next force_try
         tmp = try! FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
@@ -70,7 +68,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // WAV source reads as chapterless and importable.
         async let probedOutput = AudioProbe.probe(outputURL)
         async let probedSource = AudioProbe.probe(wav1)
-        let hasChapters = await (probedOutput.hasChapters, probedSource.hasChapters)
+        let hasChapters = await(probedOutput.hasChapters, probedSource.hasChapters)
         XCTAssertTrue(hasChapters.0)
         XCTAssertFalse(hasChapters.1)
 
@@ -198,35 +196,6 @@ final class EncodeJobIntegrationTests: XCTestCase {
     }
 
     // MARK: - fixture + spec helpers
-
-    /// Minimal 16-bit mono PCM WAV with a sine tone — enough for ffmpeg
-    /// to decode and loud enough for loudness filters to see signal.
-    private func writeSineWav(
-        to url: URL, seconds: Double, frequency: Double, sampleRate: Int = 44100
-    ) throws {
-        let frames = Int(Double(sampleRate) * seconds)
-        var samples = Data(capacity: frames * 2)
-        for i in 0 ..< frames {
-            let value = Int16(12000 * sin(2 * .pi * frequency * Double(i) / Double(sampleRate)))
-            withUnsafeBytes(of: value.littleEndian) { samples.append(contentsOf: $0) }
-        }
-        var header = Data()
-        func append(_ s: String) {
-            header.append(contentsOf: s.utf8)
-        }
-        func append32(_ v: UInt32) {
-            withUnsafeBytes(of: v.littleEndian) { header.append(contentsOf: $0) }
-        }
-        func append16(_ v: UInt16) {
-            withUnsafeBytes(of: v.littleEndian) { header.append(contentsOf: $0) }
-        }
-        append("RIFF"); append32(UInt32(36 + samples.count)); append("WAVE")
-        append("fmt "); append32(16); append16(1); append16(1)
-        append32(UInt32(sampleRate)); append32(UInt32(sampleRate * 2))
-        append16(2); append16(16)
-        append("data"); append32(UInt32(samples.count))
-        try (header + samples).write(to: url)
-    }
 
     /// Encode a 1 s sine WAV to AAC using the app's own phase-1 arg
     /// builder, so remux fixtures share the exact codec params the app

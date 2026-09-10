@@ -147,4 +147,36 @@ final class QueueManagerTests: QueueTestCase {
         XCTAssertFalse(QueueItem.Status.pending.isRetryable)
         XCTAssertFalse(QueueItem.Status.running.isRetryable)
     }
+
+    // MARK: - shutdown
+
+    func test_shutdown_cancelsPendingItemsAndReturns() async {
+        // Arrange — two queued items whose sources don't exist, so the
+        // worker would fail them in preflight if it got to them.
+        let queue = QueueManager()
+        let a = queue.enqueue(from: makeDraft(outputDir: tmp, title: "a"))
+        let b = queue.enqueue(from: makeDraft(outputDir: tmp, title: "b"))
+
+        // Act
+        await queue.shutdown()
+
+        // Assert — nothing is left active and the call unwound.
+        XCTAssertFalse(queue.isProcessing)
+        XCTAssertTrue(queue.items.allSatisfy(\.status.isFinished))
+        XCTAssertNotNil(a)
+        XCTAssertNotNil(b)
+    }
+
+    func test_shutdown_isIdempotent() async {
+        // Arrange
+        let queue = QueueManager()
+
+        // Act — a second shutdown on an already-stopped manager must
+        // neither trap on the finished stream nor hang.
+        await queue.shutdown()
+        await queue.shutdown()
+
+        // Assert
+        XCTAssertFalse(queue.isProcessing)
+    }
 }

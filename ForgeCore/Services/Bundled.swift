@@ -2,8 +2,9 @@ import Foundation
 
 public enum Bundled {
     private static let lock = NSLock()
-    private static var cache: [String: URL?] = [:]
-    private static var _overrideDirectory: URL?
+    // Both guarded by `lock` — every read and write below takes it.
+    private nonisolated(unsafe) static var cache: [String: URL?] = [:]
+    private nonisolated(unsafe) static var _overrideDirectory: URL?
 
     /// Point binary resolution at an explicit directory. Used by unit
     /// tests (which run outside the app bundle) and by the forge CLI

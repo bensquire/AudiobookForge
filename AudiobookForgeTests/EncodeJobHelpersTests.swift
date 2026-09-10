@@ -248,6 +248,32 @@ final class EncodeJobHelpersTests: XCTestCase {
         XCTAssertEqual(result.path, "/Volumes/Audiobooks/Frank Herbert/1965/Dune.m4b")
     }
 
+    func test_resolveOutputURL_neutralisesDirectoryReferences() {
+        // Arrange — an author of ".." would otherwise climb out of the
+        // chosen output root; a leading dot would hide the folder.
+        let base = URL(fileURLWithPath: "/out")
+        var dotdot = BookMetadata()
+        dotdot.title = "Dune"
+        dotdot.author = ".."
+        var hidden = BookMetadata()
+        hidden.title = ".Dune"
+        hidden.author = "Herbert"
+
+        // Act
+        let escaped = EncodeJob.resolveOutputURL(
+            in: base, metadata: dotdot, template: "{author}/{title}/{title}.m4b"
+        )
+        let unhidden = EncodeJob.resolveOutputURL(
+            in: base, metadata: hidden, template: "{author}/{title}.m4b"
+        )
+
+        // Assert
+        XCTAssertEqual(escaped.standardizedFileURL.path, "/out/_/Dune/Dune.m4b")
+        XCTAssertEqual(unhidden.path, "/out/Herbert/Dune.m4b")
+        XCTAssertEqual(EncodeJob.sanitize("."), "_")
+        XCTAssertEqual(EncodeJob.sanitize("..."), "")
+    }
+
     func test_resolveOutputURL_sanitisesIllegalFilenameCharacters() {
         // Arrange — title contains forward slashes which would otherwise
         // become path separators.

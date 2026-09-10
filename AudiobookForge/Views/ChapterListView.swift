@@ -12,6 +12,11 @@ struct ChapterListView: View {
     /// chapters — flattening one into a single chapter would silently
     /// destroy its structure (Audible m4bs etc. are already forged).
     @State private var skippedFinishedBooks: [String] = []
+    /// Imports are chained, not raced: two overlapping drops would each
+    /// snapshot the chapter list before either appended, so the dedupe
+    /// missed and the second import's skipped-books alert clobbered the
+    /// first's.
+    @State private var importTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var project = project
@@ -22,11 +27,11 @@ struct ChapterListView: View {
             if project.chapters.isEmpty {
                 dropZone
             } else {
-                chapterTable(bindable: $project)
+                chapterTable
             }
         }
         .dropDestination(for: URL.self, action: { urls, _ in
-            Task { await importPaths(urls) }
+            enqueueImport(urls)
             return true
         }, isTargeted: { isTargeted = $0 })
         .fileImporter(
@@ -35,7 +40,7 @@ struct ChapterListView: View {
             allowsMultipleSelection: true
         ) { result in
             if case let .success(urls) = result {
-                Task { await importPaths(urls) }
+                enqueueImport(urls)
             }
         }
         .alert(
@@ -71,7 +76,7 @@ struct ChapterListView: View {
     /// after a `project.reset()`), and index-based bindings into the
     /// array would crash on the now-empty array.
     @ViewBuilder
-    private func chapterTable(bindable _: Bindable<AudiobookProject>) -> some View {
+    private var chapterTable: some View {
         let chapters = project.chapters
         let indexByID = Dictionary(
             uniqueKeysWithValues: chapters.enumerated().map { ($1.id, $0) }
@@ -118,7 +123,7 @@ struct ChapterListView: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
             }
-            if hasDraftWork {
+            if project.hasDraftWork {
                 Button {
                     if project.canEnqueue {
                         confirmClear = true
@@ -153,22 +158,17 @@ struct ChapterListView: View {
         }
     }
 
-    private var hasDraftWork: Bool {
-        !project.chapters.isEmpty
-            || !project.metadata.isEmpty
-            || project.metadata.coverData != nil
-    }
-
     private var dropZone: some View {
         VStack(spacing: 10) {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 42, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("Drop MP3 files or a folder here")
+            Text("Drop audio files or a folder here")
                 .font(.title3)
-            Text("They'll be ordered naturally and turned into chapters.")
+            Text("MP3, M4A/M4B, AAC, WAV, FLAC, OGG, Opus — ordered naturally and turned into chapters.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
+                .multilineTextAlignment(.center)
             Button("Choose Files…") { isImporting = true }
                 .accessibilityIdentifier("chapters.chooseFiles")
                 .controlSize(.large)
@@ -198,6 +198,14 @@ struct ChapterListView: View {
     private func deleteSelected() {
         project.chapters.removeAll { selection.contains($0.id) }
         selection.removeAll()
+    }
+
+    private func enqueueImport(_ urls: [URL]) {
+        let previous = importTask
+        importTask = Task {
+            await previous?.value
+            await importPaths(urls)
+        }
     }
 
     private func importPaths(_ urls: [URL]) async {
@@ -247,7 +255,7 @@ struct ChapterListView: View {
             of: (Int, URL, AudioProbe.Probed).self
         ) { group in
             for (i, url) in files.enumerated() {
-                group.addTask { await (i, url, AudioProbe.probe(url)) }
+                group.addTask { await(i, url, AudioProbe.probe(url)) }
             }
             var out: [(Int, URL, AudioProbe.Probed)] = []
             for await item in group {
@@ -278,15 +286,13 @@ struct ChapterListView: View {
                 if project.metadata.author.isEmpty { project.metadata.author = first.artist ?? "" }
             }
             project.chapters.append(contentsOf: added)
-            skippedFinishedBooks = skippedNames
+            skippedFinishedBooks += skippedNames
         }
     }
 }
 
-private let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "wav", "flac", "ogg", "opus"]
-
 private func isAudio(_ url: URL) -> Bool {
-    audioExtensions.contains(url.pathExtension.lowercased())
+    LibraryScanner.audioExtensions.contains(url.pathExtension.lowercased())
 }
 
 private extension String {

@@ -13,24 +13,31 @@ on:
 jobs:
   build:
     name: Build (unsigned)
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: "26.6"
 
       - name: Install build tools
-        run: brew install xcodegen swiftformat swiftlint nasm pkg-config
+        run: brew install xcodegen nasm pkg-config
+
+      # SwiftFormat / SwiftLint come from pinned release binaries, not
+      # brew: the runner image preinstalls whatever it was built with,
+      # and a minor bump in either tool changes rule output enough to
+      # fail `--strict` with zero repo changes.
+      - name: Install pinned lint tools
+        run: ./scripts/install-lint-tools.sh
 
       - name: Lint
         run: ./scripts/lint.sh
 
       - name: Cache bundled ffmpeg
         id: cache-ffmpeg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: AudiobookForge/Resources/bin
           # Key on the build script so any change (pinned version,
@@ -78,7 +85,7 @@ jobs:
           cd build/Build/Products/Release
           zip -ry "$GITHUB_WORKSPACE/AudiobookForge-unsigned.zip" AudiobookForge.app
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: AudiobookForge-unsigned
           path: AudiobookForge-unsigned.zip

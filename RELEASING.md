@@ -87,8 +87,9 @@ The `release.yml` workflow fires on `v*` tags:
    `scripts/build-ffmpeg.sh` — cache key includes the script hash, so
    any pinned-version or configure-flag change invalidates it
 2. Imports the Developer ID cert into a throwaway keychain
-3. `xcodebuild archive` with `MARKETING_VERSION=<tag>` and
-   `CURRENT_PROJECT_VERSION=<commit-count>`
+3. `xcodebuild archive` with `MARKETING_VERSION=<tag minus any
+   prerelease suffix>` (Apple requires numeric X.Y.Z; the full tag still
+   names the DMG and the Release) and `CURRENT_PROJECT_VERSION=<commit-count>`
 4. `xcodebuild -exportArchive` with `developer-id` distribution
 5. Submits the `.app` to Apple's notary service (`xcrun notarytool submit
    --wait`), staples the ticket

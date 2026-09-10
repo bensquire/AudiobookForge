@@ -7,7 +7,10 @@ import XCTest
 /// initializer changes in exactly one place.
 @MainActor
 class QueueTestCase: XCTestCase {
-    var tmp: URL!
+    // nonisolated(unsafe): XCTest's setUp/tearDown are nonisolated even
+    // on a @MainActor test class, and the fixture is only touched there
+    // and from the (main-actor) test bodies, always serially.
+    nonisolated(unsafe) var tmp: URL!
 
     override func setUp() {
         super.setUp()

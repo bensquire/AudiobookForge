@@ -1,6 +1,6 @@
 import Foundation
 
-public struct BookMetadata: Equatable {
+public struct BookMetadata: Equatable, Sendable {
     public var title: String = ""
     public var subtitle: String = ""
     public var author: String = ""
@@ -25,7 +25,7 @@ public struct BookMetadata: Equatable {
     }
 }
 
-public enum MetadataSource: String, Hashable {
+public enum MetadataSource: String, Hashable, Sendable {
     case audnexus
     case itunes
 

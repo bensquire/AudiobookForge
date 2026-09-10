@@ -8,6 +8,9 @@ struct MetadataPanelView: View {
     @State private var isSearching = false
     @State private var results: [MetadataSearchResult] = []
     @State private var searchError: String?
+    /// The in-flight search, so a clear/reset can cancel it instead of
+    /// letting it repopulate `results` for a book that's no longer here.
+    @State private var searchTask: Task<Void, Never>?
     @AppStorage("metadata.provider") private var providerRaw: String = MetadataSearch.Provider.all.rawValue
 
     private var provider: MetadataSearch.Provider {
@@ -141,6 +144,9 @@ struct MetadataPanelView: View {
     }
 
     private func clearSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        isSearching = false
         searchQuery = ""
         results = []
         searchError = nil
@@ -151,17 +157,22 @@ struct MetadataPanelView: View {
         // .onSubmit doesn't — guard so Enter-mashing can't race two
         // searches writing `results` out of order.
         guard !isSearching else { return }
-        Task {
-            isSearching = true
-            searchError = nil
+        isSearching = true
+        searchError = nil
+        let q = searchQuery.trimmingCharacters(in: .whitespaces)
+        let provider = provider
+        searchTask = Task {
+            defer { isSearching = false }
             do {
-                let q = searchQuery.trimmingCharacters(in: .whitespaces)
                 let found = try await MetadataSearch.search(query: q, provider: provider)
+                guard !Task.isCancelled else { return }
                 results = Array(found.prefix(8))
+            } catch is CancellationError {
+                return
             } catch {
+                guard !Task.isCancelled else { return }
                 searchError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
             }
-            isSearching = false
         }
     }
 
@@ -175,7 +186,7 @@ struct MetadataPanelView: View {
             // Most providers already return the cover URL from search, so
             // start the cover download in parallel with the enrich call
             // rather than waiting on enrich first.
-            async let enrichedTask = await (try? MetadataSearch.enrich(result)) ?? result
+            async let enrichedTask = await(try? MetadataSearch.enrich(result)) ?? result
             async let initialCover: Data? = {
                 guard let url = result.coverURL else { return nil }
                 return try? await MetadataSearch.fetchCover(url)
@@ -216,7 +227,12 @@ struct MetadataPanelView: View {
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
-            SecurityScope.retain(url)
+            // The bytes are read right here and travel with the draft;
+            // nothing reads the URL again later, so a scoped access
+            // pair is enough — no need to hold the grant for the
+            // process lifetime.
+            let granted = url.startAccessingSecurityScopedResource()
+            defer { if granted { url.stopAccessingSecurityScopedResource() } }
             project.metadata.coverData = try? Data(contentsOf: url)
             project.metadata.coverSourceURL = url
         }

@@ -28,7 +28,7 @@ public enum FFmpegRunner {
     public static func run(
         arguments: [String],
         totalDuration: TimeInterval,
-        onProgress: @escaping (Double, String) -> Void,
+        onProgress: @escaping @Sendable (Double, String) -> Void,
         cancelToken: CancelToken = .init()
     ) async throws -> String {
         guard let ffmpeg = Bundled.binary("ffmpeg") else { throw RunError.notFound }
@@ -88,7 +88,7 @@ public enum FFmpegRunner {
         let remaining = stderr.fileHandleForReading.readDataToEndOfFile()
         if !remaining.isEmpty {
             for line in String(decoding: remaining, as: UTF8.self)
-                .split(separator: "\n", omittingEmptySubsequences: false)
+                .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
             {
                 tail.append(String(line))
             }
@@ -112,6 +112,16 @@ public enum FFmpegRunner {
         cancelToken: CancelToken = .init()
     ) async -> String? {
         guard let ffmpeg = Bundled.binary("ffmpeg") else { return nil }
+        if cancelToken.isCancelled { return nil }
+
+        // Every consumer fans this out per file (drag-drop probes, the
+        // library scanner, the ebur128 measurement pass) with no cap of
+        // its own. A big drop would otherwise spawn hundreds of ffmpegs
+        // at once, exhaust fds, and — because a failed spawn reads as
+        // "couldn't probe" — silently misclassify every file past the
+        // limit. Bound it here so no caller can forget.
+        await probeLimiter.acquire()
+        defer { Task { await probeLimiter.release() } }
         if cancelToken.isCancelled { return nil }
 
         let process = Process()
@@ -152,6 +162,13 @@ public enum FFmpegRunner {
         }
     }
 
+    /// Shared cap on concurrent `captureStderr` children. Same formula
+    /// as the parallel-encode fan-out so a measurement pass under the
+    /// encode limiter is never throttled harder than the encode itself.
+    private static let probeLimiter = ConcurrencyLimiter(
+        max: min(max(2, ProcessInfo.processInfo.activeProcessorCount), 12)
+    )
+
     /// Register `process.terminate()` on the token. Must be called only
     /// AFTER a successful `process.run()` — `terminate()` on a
     /// never-launched Process raises an ObjC exception. `setOnCancel`
@@ -165,7 +182,7 @@ public enum FFmpegRunner {
     }
 
     /// Parse `…time=01:23:45.67 …` from an ffmpeg progress line.
-    private static func parseTime(_ line: String) -> TimeInterval? {
+    static func parseTime(_ line: String) -> TimeInterval? {
         guard let range = line.range(of: "time=") else { return nil }
         let after = line[range.upperBound...]
         let token = after.prefix { !$0.isWhitespace }
@@ -254,7 +271,12 @@ private final class StderrBuffer: @unchecked Sendable {
 
 /// Accumulates bytes from `readabilityHandler` and yields complete lines.
 /// Locked so the captured reference can be used from the Sendable closure.
-private final class LineBuffer: @unchecked Sendable {
+///
+/// Both `\n` and `\r` terminate a line: ffmpeg ends every in-flight
+/// `time=` stats report with a bare `\r` (it redraws the same terminal
+/// line) and only the final one with `\n`. Splitting on `\n` alone
+/// batches every report until process exit, so progress never moves.
+final class LineBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
 
@@ -262,9 +284,12 @@ private final class LineBuffer: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         data.append(chunk)
         var lines: [String] = []
-        while let nl = data.firstIndex(of: 0x0A) {
-            let lineData = data.subdata(in: 0 ..< nl)
-            data.removeSubrange(0 ... nl)
+        while let end = data.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+            let lineData = data.subdata(in: 0 ..< end)
+            data.removeSubrange(0 ... end)
+            // `\r\n` yields an empty second line; drop it rather than
+            // pad the failure tail with blanks.
+            if lineData.isEmpty { continue }
             lines.append(String(decoding: lineData, as: UTF8.self))
         }
         return lines

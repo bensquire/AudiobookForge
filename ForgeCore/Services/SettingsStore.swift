@@ -6,9 +6,10 @@ import Foundation
 ///
 /// - a security-scoped bookmark, so the *sandbox grant* survives a
 ///   relaunch (a bare path would resolve but EPERM on first write), and
-/// - the plain path as a fallback, because unsigned dev builds
-///   (`scripts/build.sh` passes CODE_SIGNING_ALLOWED=NO) have no
-///   sandbox and can't create security-scoped bookmarks at all.
+/// - the plain path as a fallback, because unsigned builds
+///   (`scripts/test.sh` and `scripts/build.sh release` pass
+///   CODE_SIGNING_ALLOWED=NO) have no sandbox and can't create
+///   security-scoped bookmarks at all.
 public enum SettingsStore {
     private enum Key {
         static let bitrate = "settings.bitrate"
@@ -81,6 +82,16 @@ public enum SettingsStore {
             ) {
                 SecurityScope.retain(url)
                 resolved = url
+                // A stale bookmark still resolves this time, but the
+                // system asks us to mint a fresh one or it may stop
+                // resolving after the next move/rename.
+                if stale, let fresh = try? url.bookmarkData(
+                    options: .withSecurityScope,
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                ) {
+                    defaults.set(fresh, forKey: Key.outputBookmark)
+                }
             }
         }
         if resolved == nil, let path = defaults.string(forKey: Key.outputPath) {

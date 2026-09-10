@@ -51,7 +51,6 @@ public final class QueueItem: Identifiable {
             case .cancelled: "Cancelled"
             }
         }
-
     }
 
     public let id = UUID()

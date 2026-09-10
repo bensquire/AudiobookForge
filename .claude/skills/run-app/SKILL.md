@@ -28,7 +28,7 @@ Every interactive control carries a `.accessibilityIdentifier`. Full map:
   .chooseCover / .clearCover / .title / .subtitle / .author / .narrator /
   .series / .seriesPosition / .year / .genre / .description`
 - `queue.clearDone / .item / .item.status` (status is a static text whose value is
-  Waiting/Running/Done/Failed — read it to poll state) `/ .item.reveal / .item.duplicate
+  Pending/Running/Done/Failed/Cancelled — read it to poll state) `/ .item.reveal / .item.duplicate
   / .item.edit / .item.retry / .item.remove / .item.cancel`
 
 Gotchas learned the hard way:
