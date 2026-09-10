@@ -223,12 +223,52 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // Assert — the measurement phase ran, and the output's integrated
         // loudness sits at the target (± what a 6 s tone can hit).
         XCTAssertTrue(labels.withLock { $0 }.contains { $0.hasPrefix("Measuring loudness") })
-        let measured = await FFmpegRunner.captureStderr(
-            arguments: EncodeJob.ebur128MeasureArgs(input: outputURL)
-        )
-        let stderr = try XCTUnwrap(measured)
-        let lufs = try XCTUnwrap(EncodeJob.parseEbur128IntegratedLUFS(stderr))
+        let lufs = try await integratedLoudness(of: outputURL)
         XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
+    }
+
+    /// Integrated loudness of `url` via the same ebur128 pass the encoder
+    /// uses for its own measurement.
+    private func integratedLoudness(of url: URL) async throws -> Double {
+        let measured = await FFmpegRunner.captureStderr(
+            arguments: EncodeJob.ebur128MeasureArgs(input: url)
+        )
+        return try XCTUnwrap(try EncodeJob.parseEbur128IntegratedLUFS(XCTUnwrap(measured)))
+    }
+
+    func test_autoIfQuiet_liftsAQuietBookToTarget() async throws {
+        // Arrange — a quiet tone (≈ -28 LUFS), well below the -16 target.
+        let wav = tmp.appendingPathComponent("quiet.wav")
+        try writeSineWav(to: wav, seconds: 4.0, frequency: 440, amplitude: 2000)
+        var spec = makeSpec(chapters: [chapter(wav, title: "Quiet", codec: .pcm)], bitrate: .k64)
+        spec.settings.gainBoost = .autoIfQuiet
+        let job = EncodeJob(spec: spec)
+
+        // Act
+        let outputURL = try await job.run()
+
+        // Assert
+        let lufs = try await integratedLoudness(of: outputURL)
+        XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
+    }
+
+    func test_autoIfQuiet_leavesALoudBookUntouched() async throws {
+        // Arrange — a loud tone (≈ -12 LUFS), above target. Auto-normalize
+        // would pull this down by ~4 dB; lift-only must not.
+        let wav = tmp.appendingPathComponent("loud.wav")
+        try writeSineWav(to: wav, seconds: 4.0, frequency: 440)
+        let sourceLUFS = try await integratedLoudness(of: wav)
+        XCTAssertGreaterThan(sourceLUFS, EncodeJob.autoNormalizeTargetLUFS, "fixture isn't loud")
+        var spec = makeSpec(chapters: [chapter(wav, title: "Loud", codec: .pcm)], bitrate: .k64)
+        spec.settings.gainBoost = .autoIfQuiet
+        let job = EncodeJob(spec: spec)
+
+        // Act
+        let outputURL = try await job.run()
+
+        // Assert — output loudness matches the source, not the target.
+        let lufs = try await integratedLoudness(of: outputURL)
+        XCTAssertEqual(lufs, sourceLUFS, accuracy: 1.0)
     }
 
     func test_autoNormalize_failsLoudlyWhenNothingCanBeMeasured() async throws {

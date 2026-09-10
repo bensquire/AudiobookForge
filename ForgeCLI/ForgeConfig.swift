@@ -12,7 +12,7 @@ import Yams
 ///   - /Volumes/data/torrents/completed/Audiobooks
 /// outputRoot: /Volumes/data/audiobooks-forged
 /// bitrate: 64k        # or "source" (default)
-/// gain: auto          # off (default), +3 … +12, or auto
+/// gain: auto-if-quiet # off (default), +3 … +12, auto, or auto-if-quiet
 /// ```
 ///
 /// Encode-related values are validated at load time and typed with the
@@ -136,7 +136,7 @@ extension ForgeConfig: Decodable {
             guard let v = EncodeSettings.GainBoost(userSpelling: raw) else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .gain, in: c,
-                    debugDescription: "gain: \"\(raw)\" isn't one of off, +3, +6, +9, +12, auto"
+                    debugDescription: "gain: \"\(raw)\" isn't one of off, +3, +6, +9, +12, auto, auto-if-quiet"
                 )
             }
             config.gain = v

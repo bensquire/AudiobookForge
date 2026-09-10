@@ -131,7 +131,8 @@ libraryRoots:
   - /Volumes/data/Audiobooks       # scanned recursively
 outputRoot: /Volumes/data/forged   # {author}/{title}/{title}.m4b under here
 bitrate: source                    # or 64k, 96k, 128k, …
-gain: off                          # off, +3 … +12, or auto (auto-normalize)
+gain: off                          # off, +3 … +12, auto (normalize to -16 LUFS),
+                                   # or auto-if-quiet (only lift books below target)
 
 forge scan            # classify every book: done / needs-forge / needs-review
 forge scan --json     # same, as JSON on stdout

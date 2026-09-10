@@ -5,12 +5,13 @@ import Foundation
 /// tone is cheap to synthesise at any length (a 4-minute fixture is a
 /// few hundred milliseconds of work).
 func writeSineWav(
-    to url: URL, seconds: Double, frequency: Double, sampleRate: Int = 44100
+    to url: URL, seconds: Double, frequency: Double, sampleRate: Int = 44100,
+    amplitude: Double = 12000
 ) throws {
     let frames = Int(Double(sampleRate) * seconds)
     var samples = Data(capacity: frames * 2)
     for i in 0 ..< frames {
-        let value = Int16(12000 * sin(2 * .pi * frequency * Double(i) / Double(sampleRate)))
+        let value = Int16(amplitude * sin(2 * .pi * frequency * Double(i) / Double(sampleRate)))
         withUnsafeBytes(of: value.littleEndian) { samples.append(contentsOf: $0) }
     }
     var header = Data()

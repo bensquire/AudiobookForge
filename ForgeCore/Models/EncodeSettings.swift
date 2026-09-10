@@ -49,11 +49,13 @@ public struct EncodeSettings: Equatable, Sendable {
     }
 
     /// Optional per-book loudness adjustment applied during encoding.
-    /// Manual cases inject a fixed `volume=NdB` filter; `.autoNormalize`
-    /// measures the whole book's integrated loudness up front then
-    /// applies a single computed gain to all chapters. Either way the
-    /// remux fast-path is disabled because we have to re-encode to
-    /// touch samples.
+    /// Manual cases inject a fixed `volume=NdB` filter. The auto modes
+    /// measure the whole book's integrated loudness up front then apply
+    /// a single computed gain to all chapters: `.autoNormalize` moves
+    /// the book to the target in either direction, `.autoIfQuiet` only
+    /// ever lifts (a book already at or above target is left untouched).
+    /// Either way the remux fast-path is disabled because we have to
+    /// re-encode to touch samples.
     public enum GainBoost: String, CaseIterable, Identifiable, Equatable, Codable, Sendable {
         case off
         case dB3
@@ -61,6 +63,7 @@ public struct EncodeSettings: Equatable, Sendable {
         case dB9
         case dB12
         case autoNormalize
+        case autoIfQuiet
 
         public var id: String {
             rawValue
@@ -74,7 +77,13 @@ public struct EncodeSettings: Equatable, Sendable {
             case .dB9: "+9 dB"
             case .dB12: "+12 dB"
             case .autoNormalize: "Auto-normalize"
+            case .autoIfQuiet: "Auto (lift if quiet)"
             }
+        }
+
+        /// The modes that run the ebur128 measurement pass first.
+        public var isMeasured: Bool {
+            self == .autoNormalize || self == .autoIfQuiet
         }
 
         /// dB value for the manual cases, or nil for `.off` and
@@ -99,15 +108,16 @@ public struct EncodeSettings: Equatable, Sendable {
             switch self {
             case .off: ""
             case .autoNormalize: "auto-normalised"
+            case .autoIfQuiet: "lifted if quiet"
             default: label
             }
         }
 
         /// Parse a human spelling from config files / CLI flags: `off`,
-        /// `none`, `auto`, `auto-normalize`, `normalize`, `6`, `+6`,
-        /// `6dB`, `+6 dB`. Only the fixed steps the app offers are
-        /// accepted — `+5` is nil, not rounded. Case-, sign-, and
-        /// whitespace-insensitive.
+        /// `none`, `auto`, `auto-normalize`, `normalize`, `auto-if-quiet`,
+        /// `lift-if-quiet`, `6`, `+6`, `6dB`, `+6 dB`. Only the fixed steps
+        /// the app offers are accepted — `+5` is nil, not rounded. Case-,
+        /// sign-, and whitespace-insensitive.
         public init?(userSpelling raw: String) {
             let s = raw.lowercased().filter { !$0.isWhitespace && $0 != "-" && $0 != "_" }
             switch s {
@@ -116,6 +126,9 @@ public struct EncodeSettings: Equatable, Sendable {
                 return
             case "auto", "autonormalize", "autonormalise", "normalize", "normalise":
                 self = .autoNormalize
+                return
+            case "autoifquiet", "ifquiet", "liftifquiet", "liftquiet", "autolift":
+                self = .autoIfQuiet
                 return
             default:
                 break

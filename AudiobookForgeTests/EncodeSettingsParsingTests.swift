@@ -36,6 +36,13 @@ final class EncodeSettingsParsingTests: XCTestCase {
         XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "Normalise"), .autoNormalize)
     }
 
+    func test_gain_acceptsAutoIfQuietSpellings() {
+        XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "auto-if-quiet"), .autoIfQuiet)
+        XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "Auto If Quiet"), .autoIfQuiet)
+        XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "lift-if-quiet"), .autoIfQuiet)
+        XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "auto_if_quiet"), .autoIfQuiet)
+    }
+
     func test_gain_acceptsFixedStepsWithOptionalSignAndUnit() {
         XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "3"), .dB3)
         XCTAssertEqual(EncodeSettings.GainBoost(userSpelling: "+6"), .dB6)

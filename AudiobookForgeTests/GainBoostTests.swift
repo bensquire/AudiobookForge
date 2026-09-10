@@ -155,6 +155,25 @@ final class GainBoostTests: XCTestCase {
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -50.0), 20.0, accuracy: 0.001)
     }
 
+    func test_gainOffsetDB_liftOnly_neverAttenuates() {
+        // Arrange / Act / Assert — loud books get 0, not -6.
+        XCTAssertEqual(EncodeJob.gainOffsetDB(from: -10.0, liftOnly: true), 0.0, accuracy: 0.001)
+        XCTAssertEqual(EncodeJob.gainOffsetDB(from: -16.0, liftOnly: true), 0.0, accuracy: 0.001)
+    }
+
+    func test_gainOffsetDB_liftOnly_stillLiftsQuietBooksToTarget() {
+        XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.0, liftOnly: true), 6.0, accuracy: 0.001)
+        XCTAssertEqual(EncodeJob.gainOffsetDB(from: -50.0, liftOnly: true), 20.0, accuracy: 0.001)
+    }
+
+    func test_autoIfQuiet_isMeasuredNotManual() {
+        XCTAssertTrue(EncodeSettings.GainBoost.autoIfQuiet.isMeasured)
+        XCTAssertTrue(EncodeSettings.GainBoost.autoNormalize.isMeasured)
+        XCTAssertFalse(EncodeSettings.GainBoost.dB6.isMeasured)
+        XCTAssertFalse(EncodeSettings.GainBoost.autoIfQuiet.isManual)
+        XCTAssertEqual(EncodeSettings.GainBoost.autoIfQuiet.suffix, "lifted if quiet")
+    }
+
     func test_gainOffsetDB_roundsToOneDecimal() {
         // Source at -22.37 LUFS → +6.37 raw → +6.4 rounded.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.37), 6.4, accuracy: 0.001)

@@ -189,8 +189,9 @@ public final class EncodeJob: Sendable {
     // MARK: - Phase 0 — gain filter resolution
 
     /// Returns the `-af` filter chain to apply to each chapter, or nil
-    /// when `gainBoost == .off`. For `.autoNormalize` runs a parallel
-    /// ebur128 measurement pass first.
+    /// when no gain is needed (`.off`, or `.autoIfQuiet` on a book that
+    /// is already loud enough). The auto modes run a parallel ebur128
+    /// measurement pass first.
     private func resolvePhase0GainFilter(
         limiter: ConcurrencyLimiter,
         tokens: [CancelToken]
@@ -202,7 +203,7 @@ public final class EncodeJob: Sendable {
         case .dB3, .dB6, .dB9, .dB12:
             return Self.gainFilter(dB: Double(spec.settings.gainBoost.manualDB!))
 
-        case .autoNormalize:
+        case .autoNormalize, .autoIfQuiet:
             onProgress(0, "Measuring loudness…")
             let totalChapters = spec.chapters.count
             // Chapters finish out of order under the limiter; count
@@ -258,19 +259,24 @@ public final class EncodeJob: Sendable {
                 throw EncodeError.loudnessMeasurementFailed
             }
 
-            return Self.gainFilter(dB: Self.gainOffsetDB(from: bookI))
+            let liftOnly = spec.settings.gainBoost == .autoIfQuiet
+            let offset = Self.gainOffsetDB(from: bookI, liftOnly: liftOnly)
+            // A lift-only book that's already at target gets no filter at
+            // all — a `volume=0dB` pass would still re-quantise samples
+            // for nothing.
+            guard offset != 0 else { return nil }
+            return Self.gainFilter(dB: offset)
         }
     }
 
     /// Compute the per-book gain in dB needed to bring `bookLUFS` to the
     /// auto-normalize target, clamped to a sane range and rounded to one
-    /// decimal place for clean ffmpeg arg readability.
-    static func gainOffsetDB(from bookLUFS: Double) -> Double {
+    /// decimal place for clean ffmpeg arg readability. `liftOnly` raises
+    /// the floor to 0 dB: quiet books come up, loud ones are left alone.
+    static func gainOffsetDB(from bookLUFS: Double, liftOnly: Bool = false) -> Double {
         let raw = autoNormalizeTargetLUFS - bookLUFS
-        let clamped = max(
-            autoNormalizeGainBounds.lowerBound,
-            min(autoNormalizeGainBounds.upperBound, raw)
-        )
+        let floor = liftOnly ? 0 : autoNormalizeGainBounds.lowerBound
+        let clamped = max(floor, min(autoNormalizeGainBounds.upperBound, raw))
         return (clamped * 10).rounded() / 10
     }
 
