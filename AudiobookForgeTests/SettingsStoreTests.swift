@@ -3,20 +3,19 @@ import XCTest
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
-    // nonisolated(unsafe): see QueueTestSupport — XCTest setUp/tearDown are nonisolated.
-    private nonisolated(unsafe) var defaults: UserDefaults!
+    private var defaults: UserDefaults!
     private let suite = "SettingsStoreTests"
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         defaults = UserDefaults(suiteName: suite)
         defaults.removePersistentDomain(forName: suite)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suite)
         defaults = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func test_load_returnsDefaultsWhenNothingStored() {

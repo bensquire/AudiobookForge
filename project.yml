@@ -9,10 +9,7 @@ options:
 settings:
   base:
     # Swift 6 language mode: data-race safety is enforced as errors on
-    # every target. The deliberate carve-outs are the `nonisolated(unsafe)`
-    # markers on Bundled's lock-guarded statics, two immutable `Regex`
-    # constants, and the XCTest fixtures mutated from nonisolated
-    # setUp/tearDown.
+    # every target, with no `nonisolated(unsafe)` carve-outs.
     SWIFT_VERSION: "6"
     MARKETING_VERSION: "1.3.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -20,9 +17,10 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # Expanded by xcodegen from the shell when set (export it before
     # `xcodegen generate` to build the sandboxed app from Xcode without
-    # re-picking a team after every regenerate). Unset → empty, which is
-    # fine for the ad-hoc / unsigned script builds. CI and release.sh
-    # pass DEVELOPMENT_TEAM explicitly on the xcodebuild command line.
+    # re-picking a team after every regenerate). Unset, xcodegen leaves
+    # the literal placeholder in the project and xcodebuild resolves it
+    # to empty — fine for the ad-hoc / unsigned script builds. CI and
+    # release.sh pass DEVELOPMENT_TEAM explicitly on the command line.
     DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
 
 # Pinned exactly: Package.resolved is gitignored (the xcodeproj is

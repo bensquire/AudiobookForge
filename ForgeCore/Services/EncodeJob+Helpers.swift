@@ -3,8 +3,8 @@ import ImageIO
 
 /// Pure, process-free helpers split out of EncodeJob.swift: ffmpeg
 /// argument builders, loudness math, and the enqueue-time resolvers the
-/// queue and the CLI call before any job exists. Everything here is
-/// `nonisolated` — no `EncodeJob` instance state is touched.
+/// queue and the CLI call before any job exists. None of these touch
+/// `EncodeJob` instance state.
 extension EncodeJob {
     // MARK: - Pure arg builders (unit-testable, no Process spawn)
 
@@ -49,18 +49,6 @@ extension EncodeJob {
         return args
     }
 
-    /// Convert one chunk's `FFmpegRunner` progress (a 0…1 fraction of
-    /// that chunk) into what the phase-1 plumbing needs: seconds of
-    /// source audio for `ProgressAggregator`, and a rounded percent for
-    /// the per-chunk update gate. Kept separate because the two units
-    /// were once confused here and the bar sat at 0% for whole encodes.
-    static func phase1ChunkProgress(
-        fraction: Double, chapterDuration: TimeInterval
-    ) -> (seconds: TimeInterval, pct: Int) {
-        let clamped = min(1, max(0, fraction))
-        return (clamped * chapterDuration, Int(clamped * 100))
-    }
-
     /// Cap per-chapter loudness measurement to this many seconds. EBU
     /// R128's integrated value stabilises within ~30–60s of continuous
     /// speech, so two minutes is comfortably enough for audiobook
@@ -68,18 +56,27 @@ extension EncodeJob {
     /// vs. full-file integrated is ~0.3 LU on typical speech content.
     static let ebur128MeasureCapSeconds: Int = 120
 
-    /// `ffmpeg` arg list to measure a single chapter's integrated
-    /// loudness via the `ebur128` filter. No encoder work, no output —
-    /// just decode + meter, capped to `ebur128MeasureCapSeconds`.
-    static func ebur128MeasureArgs(input: URL) -> [String] {
-        [
-            "-i", input.path,
-            "-t", String(ebur128MeasureCapSeconds),
-            "-vn",
-            "-map", "0:a",
-            "-af", "ebur128",
-            "-f", "null", "-"
-        ]
+    /// `ffmpeg` arg list to measure integrated loudness via the `ebur128`
+    /// filter. No encoder work, no output — just decode + meter. The
+    /// encoder measures each chapter from the top, capped to
+    /// `ebur128MeasureCapSeconds`; tests pass an explicit window.
+    static func ebur128MeasureArgs(
+        input: URL,
+        start: TimeInterval? = nil,
+        duration: TimeInterval? = TimeInterval(ebur128MeasureCapSeconds)
+    ) -> [String] {
+        var args: [String] = []
+        if let start { args += ["-ss", seconds(start)] }
+        args += ["-i", input.path]
+        if let duration { args += ["-t", seconds(duration)] }
+        args += ["-vn", "-map", "0:a", "-af", "ebur128", "-f", "null", "-"]
+        return args
+    }
+
+    /// `120` rather than `120.0` for whole seconds — ffmpeg accepts
+    /// both, but the argv reads (and diffs) better.
+    private static func seconds(_ t: TimeInterval) -> String {
+        t == t.rounded() ? String(Int(t)) : String(t)
     }
 
     /// Build the `-af` chain for a fixed dB boost. Always followed by

@@ -27,11 +27,8 @@ struct Scan: AsyncParsableCommand {
             throw ScanError.ffmpegMissing
         }
 
-        for root in config.libraryRootURLs {
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir),
-                  isDir.boolValue
-            else { throw ScanError.rootNotADirectory(root.path) }
+        for root in config.libraryRootURLs where !FileManager.default.isDirectory(at: root) {
+            throw ScanError.rootNotADirectory(root.path)
         }
 
         let probe: @Sendable (URL) async -> AudioProbe.ChapterFormat = if noProbe {

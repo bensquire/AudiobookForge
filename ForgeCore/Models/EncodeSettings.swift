@@ -29,6 +29,22 @@ public struct EncodeSettings: Equatable, Sendable {
             }
         }
 
+        /// Decodes either the raw value or any `userSpelling`; anything
+        /// else is a decoding error naming the accepted values, so a
+        /// config typo fails at load rather than at encode time.
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            guard let value = Self(rawValue: raw) ?? Self(userSpelling: raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container, debugDescription: "\"\(raw)\" isn't one of \(Self.acceptedSpellings)"
+                )
+            }
+            self = value
+        }
+
+        public static let acceptedSpellings = allCases.map(\.rawValue).joined(separator: ", ")
+
         /// Parse a human spelling from config files / CLI flags:
         /// `source`, `match`, `64k`, `64`, `64kbps`, `64 kbps`. Case-
         /// and whitespace-insensitive. Nil for anything else — callers
@@ -81,9 +97,29 @@ public struct EncodeSettings: Equatable, Sendable {
             }
         }
 
-        /// The modes that run the ebur128 measurement pass first.
-        public var isMeasured: Bool {
-            self == .autoNormalize || self == .autoIfQuiet
+        /// The canonical spelling for config files (`gain: +6`).
+        public var configSpelling: String {
+            switch self {
+            case .off: "off"
+            case .autoNormalize: "auto"
+            case .autoIfQuiet: "auto-if-quiet"
+            default: "+\(manualDB ?? 0)"
+            }
+        }
+
+        public static let acceptedSpellings = allCases.map(\.configSpelling).joined(separator: ", ")
+
+        /// Decodes either the raw value or any `userSpelling`; anything
+        /// else is a decoding error naming the accepted values.
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            guard let value = Self(rawValue: raw) ?? Self(userSpelling: raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container, debugDescription: "\"\(raw)\" isn't one of \(Self.acceptedSpellings)"
+                )
+            }
+            self = value
         }
 
         /// dB value for the manual cases, or nil for `.off` and

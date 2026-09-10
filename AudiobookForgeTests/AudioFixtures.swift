@@ -34,28 +34,88 @@ func writeSineWav(
     amplitude: Double = 12000
 ) throws {
     let frames = Int(Double(sampleRate) * seconds)
-    var samples = Data(capacity: frames * 2)
+    var samples = [Int16](repeating: 0, count: frames)
+    let step = 2 * Double.pi * frequency / Double(sampleRate)
     for i in 0 ..< frames {
-        let value = Int16(amplitude * sin(2 * .pi * frequency * Double(i) / Double(sampleRate)))
-        withUnsafeBytes(of: value.littleEndian) { samples.append(contentsOf: $0) }
+        samples[i] = Int16(amplitude * sin(step * Double(i)))
     }
-    var header = Data()
+    var data = Data(capacity: 44 + frames * 2)
     func append(_ s: String) {
-        header.append(contentsOf: s.utf8)
+        data.append(contentsOf: s.utf8)
     }
     func append32(_ v: UInt32) {
-        withUnsafeBytes(of: v.littleEndian) { header.append(contentsOf: $0) }
+        withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) }
     }
     func append16(_ v: UInt16) {
-        withUnsafeBytes(of: v.littleEndian) { header.append(contentsOf: $0) }
+        withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) }
     }
-    append("RIFF"); append32(UInt32(36 + samples.count)); append("WAVE")
+    append("RIFF"); append32(UInt32(36 + frames * 2)); append("WAVE")
     append("fmt "); append32(16); append16(1); append16(1)
     append32(UInt32(sampleRate)); append32(UInt32(sampleRate * 2))
     append16(2); append16(16)
-    append("data"); append32(UInt32(samples.count))
-    try (header + samples).write(to: url)
+    append("data"); append32(UInt32(frames * 2))
+    samples.withUnsafeBufferPointer { data.append($0) } // arm64 is little-endian
+    try data.write(to: url)
 }
+
+/// Fixtures that are expensive enough to build once per test process.
+enum SharedFixtures {
+    /// Ten minutes of tone. Cancel-mid-run tests need an encode that is
+    /// still in flight when the cancel lands, and ffmpeg encodes ~500×
+    /// realtime here, so nothing shorter leaves a window. Written at
+    /// 8 kHz to keep generation cheap — the encoder resamples to the
+    /// chapter's declared 44.1 kHz, so the encode itself is unchanged.
+    static let tenMinuteTone: URL = {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudiobookForgeTests-\(ProcessInfo.processInfo.processIdentifier)")
+        let url = dir.appendingPathComponent("ten-minute-tone.wav")
+        // swiftlint:disable:next force_try
+        try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // swiftlint:disable:next force_try
+        try! writeSineWav(to: url, seconds: 600, frequency: 440, sampleRate: 8000)
+        return url
+    }()
+}
+
+/// Base for tests that run the real bundled ffmpeg: a throwaway
+/// directory per test, `Bundled` pointed at the repo's build, and a skip
+/// (not a failure) when `scripts/build-ffmpeg.sh` hasn't run.
+class FFmpegTestCase: XCTestCase {
+    var tmp: URL!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        Bundled.setOverrideDirectory(repoBinDir)
+        try XCTSkipIf(Bundled.binary("ffmpeg") == nil, "bundled ffmpeg not built")
+        tmp = try FileManager.default.url(
+            for: .itemReplacementDirectory, in: .userDomainMask,
+            appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
+            create: true
+        )
+    }
+
+    override func tearDown() async throws {
+        Bundled.setOverrideDirectory(nil)
+        if let tmp { try? FileManager.default.removeItem(at: tmp) }
+        try await super.tearDown()
+    }
+}
+
+/// Poll `condition` until it holds or `timeout` elapses (then throw, so
+/// a hung queue fails the test instead of skipping it).
+@MainActor
+func waitUntil(
+    timeout: TimeInterval = 15,
+    _ condition: @MainActor () -> Bool
+) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+        guard Date() < deadline else { throw TimedOut() }
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
+struct TimedOut: Error {}
 
 /// Encode a sine WAV to AAC using the app's own phase-1 arg builder, so
 /// remux fixtures share the exact codec params the app would produce.
@@ -158,10 +218,7 @@ func loadCommonTitle(_ asset: AVURLAsset) async throws -> String? {
 func integratedLoudness(
     of url: URL, start: TimeInterval? = nil, duration: TimeInterval? = nil
 ) async throws -> Double {
-    var args: [String] = []
-    if let start { args += ["-ss", String(start)] }
-    if let duration { args += ["-t", String(duration)] }
-    args += ["-i", url.path, "-vn", "-map", "0:a", "-af", "ebur128", "-f", "null", "-"]
+    let args = EncodeJob.ebur128MeasureArgs(input: url, start: start, duration: duration)
     let captured = await FFmpegRunner.captureStderr(arguments: args)
     let stderr = try XCTUnwrap(captured)
     return try XCTUnwrap(EncodeJob.parseEbur128IntegratedLUFS(stderr), "no ebur128 summary in:\n\(stderr)")

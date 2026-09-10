@@ -23,4 +23,19 @@ public enum ChapterImport {
         let skipped = probed.filter(\.info.hasChapters).map(\.url.lastPathComponent)
         return (importable, skipped)
     }
+
+    /// The chapter a probed file becomes on import. Title falls back to
+    /// the file name when the tag is missing or blank.
+    public static func chapter(for url: URL, probed p: AudioProbe.Probed) -> Chapter {
+        let tagged = p.title?.trimmingCharacters(in: .whitespaces) ?? ""
+        return Chapter(
+            sourceURL: url,
+            title: tagged.isEmpty ? url.deletingPathExtension().lastPathComponent : tagged,
+            duration: p.duration,
+            sourceBitrate: p.bitrate,
+            codec: p.codec,
+            sampleRate: p.sampleRate,
+            channels: p.channels
+        )
+    }
 }

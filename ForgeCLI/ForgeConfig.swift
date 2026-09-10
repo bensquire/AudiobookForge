@@ -35,7 +35,7 @@ struct ForgeConfig {
     }
 
     static func load(from path: String) throws -> Self {
-        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        let url = Self.expanded(path)
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -48,38 +48,28 @@ struct ForgeConfig {
         }
         do {
             return try YAMLDecoder().decode(Self.self, from: data)
-        } catch let error as ConfigError {
-            throw error
         } catch let DecodingError.dataCorrupted(context) {
-            // Our own field validators throw through this path; keep
-            // just their message rather than the coding-path dump.
-            throw ConfigError.invalid(url.path, context.debugDescription)
+            // Field validation (ours and the enums') throws through this
+            // path; "gain: …" reads better than the coding-path dump.
+            let key = context.codingPath.map(\.stringValue).joined(separator: ".")
+            throw ConfigError.invalid(
+                url.path, key.isEmpty ? context.debugDescription : "\(key): \(context.debugDescription)"
+            )
         } catch {
             throw ConfigError.invalid(url.path, String(describing: error))
         }
     }
 
     var stateDirURL: URL {
-        URL(fileURLWithPath: (stateDir as NSString).expandingTildeInPath)
-    }
-
-    var outputRootURL: URL? {
-        outputRoot.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        Self.expanded(stateDir)
     }
 
     var libraryRootURLs: [URL] {
-        libraryRoots.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        libraryRoots.map(Self.expanded)
     }
 
-    /// The `EncodeSettings` a `run` would hand to `EncodeJob` — the one
-    /// place config values become encode parameters.
-    func encodeSettings() -> EncodeSettings {
-        var settings = EncodeSettings()
-        settings.bitrate = bitrate
-        settings.gainBoost = gain
-        settings.filenameTemplate = filenameTemplate
-        settings.outputDirectory = outputRootURL
-        return settings
+    private static func expanded(_ path: String) -> URL {
+        URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
     }
 
     enum ConfigError: Error, CustomStringConvertible {
@@ -116,40 +106,23 @@ extension ForgeConfig: Decodable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Absent keys keep the property defaults; the enums validate their
+        // own spellings (see EncodeSettings) and throw with the accepted list.
         var config = try ForgeConfig(libraryRoots: c.decode([String].self, forKey: .libraryRoots))
         config.outputRoot = try c.decodeIfPresent(String.self, forKey: .outputRoot)
-        if let v = try c.decodeIfPresent(String.self, forKey: .stateDir) { config.stateDir = v }
-        if let v = try c.decodeIfPresent(String.self, forKey: .filenameTemplate) {
-            config.filenameTemplate = v
+        config.stateDir = try c.decodeIfPresent(String.self, forKey: .stateDir) ?? config.stateDir
+        config.filenameTemplate = try c.decodeIfPresent(String.self, forKey: .filenameTemplate)
+            ?? config.filenameTemplate
+        config.bitrate = try c.decodeIfPresent(EncodeSettings.Bitrate.self, forKey: .bitrate) ?? config
+            .bitrate
+        config.gain = try c.decodeIfPresent(EncodeSettings.GainBoost.self, forKey: .gain) ?? config.gain
+        config.concurrency = try c.decodeIfPresent(Int.self, forKey: .concurrency) ?? config.concurrency
+        guard config.concurrency >= 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .concurrency, in: c, debugDescription: "must be at least 1"
+            )
         }
-        if let raw = try c.decodeIfPresent(String.self, forKey: .bitrate) {
-            guard let v = EncodeSettings.Bitrate(userSpelling: raw) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .bitrate, in: c,
-                    debugDescription: "bitrate: \"\(raw)\" isn't one of "
-                        + EncodeSettings.Bitrate.allCases.map(\.rawValue).joined(separator: ", ")
-                )
-            }
-            config.bitrate = v
-        }
-        if let raw = try c.decodeIfPresent(String.self, forKey: .gain) {
-            guard let v = EncodeSettings.GainBoost(userSpelling: raw) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .gain, in: c,
-                    debugDescription: "gain: \"\(raw)\" isn't one of off, +3, +6, +9, +12, auto, auto-if-quiet"
-                )
-            }
-            config.gain = v
-        }
-        if let v = try c.decodeIfPresent(Int.self, forKey: .concurrency) {
-            guard v >= 1 else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .concurrency, in: c, debugDescription: "concurrency must be at least 1"
-                )
-            }
-            config.concurrency = v
-        }
-        if let v = try c.decodeIfPresent(Autonomy.self, forKey: .autonomy) { config.autonomy = v }
+        config.autonomy = try c.decodeIfPresent(Autonomy.self, forKey: .autonomy) ?? config.autonomy
         self = config
     }
 }

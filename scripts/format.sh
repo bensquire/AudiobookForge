@@ -1,30 +1,17 @@
 #!/usr/bin/env bash
-# Auto-fix anything SwiftFormat can reach. SwiftLint is checked but not
-# auto-fixed (some of its fixes are opinionated and not all reviewable).
+# Auto-fix anything SwiftFormat can reach, then SwiftLint's autocorrect.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lint-common.sh
+source "$(dirname "$0")/lint-common.sh"
 cd "$ROOT"
 
-# Prefer the pinned tool binaries from scripts/install-lint-tools.sh
-# (what CI runs) over whatever brew happens to have installed.
-if [[ -d "$ROOT/build/tools/bin" ]]; then
-  export PATH="$ROOT/build/tools/bin:$PATH"
-fi
+echo "==> swiftformat $("$SWIFTFORMAT" --version) (write)"
+"$SWIFTFORMAT" "${TARGETS[@]}"
 
-if ! command -v swiftformat >/dev/null; then
-  echo "swiftformat not found. Install with: brew install swiftformat" >&2
-  exit 1
-fi
-
-echo "==> swiftformat (write)"
-swiftformat AudiobookForge AudiobookForgeTests ForgeCore ForgeCLI
-
-if command -v swiftlint >/dev/null; then
-  echo
-  echo "==> swiftlint --fix (autocorrect)"
-  swiftlint --fix --quiet AudiobookForge AudiobookForgeTests ForgeCore ForgeCLI
-fi
+echo
+echo "==> swiftlint $("$SWIFTLINT" --version) --fix (autocorrect)"
+"$SWIFTLINT" --fix --quiet "${TARGETS[@]}"
 
 echo
 echo "Done. Re-run scripts/lint.sh to verify everything is clean."

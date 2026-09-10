@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Counting semaphore — async/await flavour. `acquire()` suspends when
 /// `inFlight` would exceed `max`; `release()` wakes the next waiter (FIFO).
@@ -8,6 +9,13 @@ import Foundation
 /// parallel — most cores would just queue on the scheduler anyway and
 /// disk contention would actually slow things down).
 actor ConcurrencyLimiter {
+    /// How many ffmpeg children this machine should run at once: at
+    /// least 2 so a single slow chapter can't serialise a book, at most
+    /// 12 because beyond that disk contention wins over cores. Shared by
+    /// the parallel encode and by `FFmpegRunner.captureStderr`'s probe
+    /// cap so the two can't drift apart.
+    static let hardwareCap = min(max(2, ProcessInfo.processInfo.activeProcessorCount), 12)
+
     private let cap: Int
     private var inFlight: Int = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -67,5 +75,23 @@ actor ProgressAggregator {
         guard total > 0 else { return 0 }
         let sum = perChunk.values.reduce(0, +)
         return min(0.95, (sum / total) * 0.95)
+    }
+}
+
+/// Collapses a stream of 0…1 progress fractions to integer-percent
+/// steps. ffmpeg reports ~2×/s per child and the UI only cares about
+/// whole percents, so gating here avoids a Task spawn and actor hop per
+/// report. Safe to call from the pipe-reader queue.
+final class PercentGate: Sendable {
+    private let last = OSAllocatedUnfairLock<Int>(initialState: -1)
+
+    /// The new whole percent, or nil if it hasn't changed since last time.
+    func step(_ fraction: Double) -> Int? {
+        let pct = Int(fraction * 100)
+        return last.withLock { current -> Int? in
+            guard pct != current else { return nil }
+            current = pct
+            return pct
+        }
     }
 }

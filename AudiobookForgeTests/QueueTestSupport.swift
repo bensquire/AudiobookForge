@@ -7,24 +7,20 @@ import XCTest
 /// initializer changes in exactly one place.
 @MainActor
 class QueueTestCase: XCTestCase {
-    // nonisolated(unsafe): XCTest's setUp/tearDown are nonisolated even
-    // on a @MainActor test class, and the fixture is only touched there
-    // and from the (main-actor) test bodies, always serially.
-    nonisolated(unsafe) var tmp: URL!
+    var tmp: URL!
 
-    override func setUp() {
-        super.setUp()
-        // swiftlint:disable:next force_try
-        tmp = try! FileManager.default.url(
+    override func setUp() async throws {
+        try await super.setUp()
+        tmp = try FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
             create: true
         )
     }
 
-    override func tearDown() {
-        try? FileManager.default.removeItem(at: tmp)
-        super.tearDown()
+    override func tearDown() async throws {
+        if let tmp { try? FileManager.default.removeItem(at: tmp) }
+        try await super.tearDown()
     }
 
     /// A draft that satisfies `canEnqueue` without touching real audio —

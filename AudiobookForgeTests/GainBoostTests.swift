@@ -24,6 +24,7 @@ final class GainBoostTests: XCTestCase {
         }
         XCTAssertFalse(EncodeSettings.GainBoost.off.isManual)
         XCTAssertFalse(EncodeSettings.GainBoost.autoNormalize.isManual)
+        XCTAssertFalse(EncodeSettings.GainBoost.autoIfQuiet.isManual)
     }
 
     // MARK: - canRemux gate
@@ -131,8 +132,9 @@ final class GainBoostTests: XCTestCase {
         XCTAssertEqual(EncodeSettings.GainBoost.dB12.suffix, "+12 dB")
     }
 
-    func test_gainBoost_suffix_autoNormaliseUsesPastTense() {
+    func test_gainBoost_suffix_autoModesDescribeWhatHappened() {
         XCTAssertEqual(EncodeSettings.GainBoost.autoNormalize.suffix, "auto-normalised")
+        XCTAssertEqual(EncodeSettings.GainBoost.autoIfQuiet.suffix, "lifted if quiet")
     }
 
     // MARK: - gainOffsetDB (auto-normalize math)
@@ -164,14 +166,6 @@ final class GainBoostTests: XCTestCase {
     func test_gainOffsetDB_liftOnly_stillLiftsQuietBooksToTarget() {
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.0, liftOnly: true), 6.0, accuracy: 0.001)
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -50.0, liftOnly: true), 20.0, accuracy: 0.001)
-    }
-
-    func test_autoIfQuiet_isMeasuredNotManual() {
-        XCTAssertTrue(EncodeSettings.GainBoost.autoIfQuiet.isMeasured)
-        XCTAssertTrue(EncodeSettings.GainBoost.autoNormalize.isMeasured)
-        XCTAssertFalse(EncodeSettings.GainBoost.dB6.isMeasured)
-        XCTAssertFalse(EncodeSettings.GainBoost.autoIfQuiet.isManual)
-        XCTAssertEqual(EncodeSettings.GainBoost.autoIfQuiet.suffix, "lifted if quiet")
     }
 
     func test_gainOffsetDB_roundsToOneDecimal() {

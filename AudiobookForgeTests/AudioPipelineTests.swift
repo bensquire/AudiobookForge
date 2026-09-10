@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import XCTest
 @testable import ForgeCore
 
@@ -9,26 +10,7 @@ import XCTest
 /// sine tone with a distinct frequency and known loudness, so both can be
 /// verified from the decoded output rather than trusted from metadata.
 /// Total runtime is a few seconds — the audio is short by design.
-final class AudioPipelineTests: XCTestCase {
-    private nonisolated(unsafe) var tmp: URL!
-
-    override func setUp() {
-        super.setUp()
-        Bundled.setOverrideDirectory(repoBinDir)
-        // swiftlint:disable:next force_try
-        tmp = try! FileManager.default.url(
-            for: .itemReplacementDirectory, in: .userDomainMask,
-            appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-            create: true
-        )
-    }
-
-    override func tearDown() {
-        Bundled.setOverrideDirectory(nil)
-        try? FileManager.default.removeItem(at: tmp)
-        super.tearDown()
-    }
-
+final class AudioPipelineTests: FFmpegTestCase {
     // MARK: - Stitching
 
     /// Three chapters of different lengths and tones, re-encoded. The
@@ -83,17 +65,16 @@ final class AudioPipelineTests: XCTestCase {
     /// to be in chapter order.
     func test_stitch_moreChaptersThanParallelCap_keepsOrder() async throws {
         // Arrange — 16 half-second chapters alternating between two tones.
-        let count = 16
-        var chapters: [Chapter] = []
-        var plan: [(name: String, seconds: Double, hz: Double)] = []
-        for i in 0 ..< count {
-            let hz: Double = i.isMultiple(of: 2) ? 400 : 1000
-            let wav = tmp.appendingPathComponent("c\(i).wav")
-            try writeSineWav(to: wav, seconds: 0.5, frequency: hz)
-            chapters.append(chapter(wav, title: "Ch \(i + 1)", codec: .pcm, duration: 0.5))
-            plan.append(("Ch \(i + 1)", 0.5, hz))
+        let plan: [(name: String, seconds: Double, hz: Double)] = (0 ..< 16).map { i in
+            ("Ch \(i + 1)", 0.5, i.isMultiple(of: 2) ? 400 : 1000)
         }
-        XCTAssertGreaterThan(count, 12, "must exceed the ConcurrencyLimiter cap to mean anything")
+        XCTAssertGreaterThan(plan.count, ConcurrencyLimiter.hardwareCap, "must exceed the parallel cap")
+        var chapters: [Chapter] = []
+        for (i, p) in plan.enumerated() {
+            let wav = tmp.appendingPathComponent("c\(i).wav")
+            try writeSineWav(to: wav, seconds: p.seconds, frequency: p.hz)
+            chapters.append(chapter(wav, title: p.name, codec: .pcm, duration: p.seconds))
+        }
         let job = EncodeJob(spec: makeSpec(in: tmp, chapters: chapters, bitrate: .k64))
 
         // Act
@@ -203,12 +184,15 @@ final class AudioPipelineTests: XCTestCase {
             bitrate: .k64
         )
         spec.settings.gainBoost = .autoNormalize
-        let job = EncodeJob(spec: spec)
+        let labels = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let job = EncodeJob(spec: spec) { _, label in labels.withLock { $0.append(label) } }
 
         // Act
         let out = try await job.run()
 
-        // Assert — book on target; chapters still ~12 dB apart.
+        // Assert — the measurement phase ran; book on target; chapters
+        // still ~12 dB apart.
+        XCTAssertTrue(labels.withLock { $0 }.contains { $0.hasPrefix("Measuring loudness") })
         let book = try await integratedLoudness(of: out)
         XCTAssertEqual(book, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
         let outLoud = try await integratedLoudness(of: out, start: 0, duration: 3)
@@ -271,11 +255,7 @@ final class AudioPipelineTests: XCTestCase {
             XCTAssertEqual(probed.artist, "Fixture Author")
             XCTAssertEqual(probed.bitrate, 64000, accuracy: 4000, "bitrate of \(url.lastPathComponent)")
             XCTAssertFalse(probed.hasChapters)
-            chapters.append(Chapter(
-                sourceURL: url, title: probed.title ?? "", duration: probed.duration,
-                sourceBitrate: probed.bitrate, codec: probed.codec,
-                sampleRate: probed.sampleRate, channels: probed.channels
-            ))
+            chapters.append(ChapterImport.chapter(for: url, probed: probed))
         }
         let job = EncodeJob(spec: makeSpec(in: tmp, chapters: chapters, bitrate: .source))
 

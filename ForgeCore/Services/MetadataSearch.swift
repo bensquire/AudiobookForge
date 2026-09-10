@@ -102,8 +102,9 @@ public enum MetadataSearch {
         return data
     }
 
-    /// `Result(catching:)` for an async body — the stdlib overload isn't
-    /// available in Swift 5 language mode.
+    /// `Result(catching:)` for an async body. The stdlib's async overload
+    /// doesn't resolve for `Result<_, any Error>` on our deployment
+    /// target, so this stays even though the project is in Swift 6 mode.
     private static func attempt(
         _ body: () async throws -> [MetadataSearchResult]
     ) async -> Result<[MetadataSearchResult], Error> {

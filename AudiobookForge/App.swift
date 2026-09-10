@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard queue.isProcessing else { return .terminateNow }
-        Task { @MainActor in
+        Task {
             await queue.shutdown()
             sender.reply(toApplicationShouldTerminate: true)
         }

@@ -57,6 +57,28 @@ final class EncodeSettingsParsingTests: XCTestCase {
         XCTAssertNil(EncodeSettings.GainBoost(userSpelling: ""))
     }
 
+    func test_decoding_acceptsUserSpellingsAndRejectsUnknownWithAcceptedList() throws {
+        // Arrange — what a YAML/JSON config would hand the decoder.
+        let ok = Data(#"["+6", "auto-if-quiet", "dB3"]"#.utf8)
+        let bad = Data(#"["loud"]"#.utf8)
+
+        // Act / Assert
+        XCTAssertEqual(
+            try JSONDecoder().decode([EncodeSettings.GainBoost].self, from: ok),
+            [.dB6, .autoIfQuiet, .dB3]
+        )
+        XCTAssertThrowsError(try JSONDecoder().decode([EncodeSettings.GainBoost].self, from: bad)) { error in
+            guard case let DecodingError.dataCorrupted(context) = error else {
+                return XCTFail("expected dataCorrupted, got \(error)")
+            }
+            XCTAssertTrue(context.debugDescription.contains("auto-if-quiet"), context.debugDescription)
+        }
+        XCTAssertEqual(
+            try JSONDecoder().decode([EncodeSettings.Bitrate].self, from: Data(#"["64", "source"]"#.utf8)),
+            [.k64, .source]
+        )
+    }
+
     func test_enums_roundTripThroughCodable() throws {
         let encoded = try JSONEncoder().encode([EncodeSettings.Bitrate.k96])
         XCTAssertEqual(try JSONDecoder().decode([EncodeSettings.Bitrate].self, from: encoded), [.k96])

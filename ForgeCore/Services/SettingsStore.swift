@@ -100,13 +100,7 @@ public enum SettingsStore {
         // The directory may have been deleted or unmounted since last
         // run; a vanished output dir must not satisfy canEnqueue and
         // then fail at encode time.
-        guard let url = resolved, isDirectory(url) else { return nil }
+        guard let url = resolved, FileManager.default.isDirectory(at: url) else { return nil }
         return url
-    }
-
-    private static func isDirectory(_ url: URL) -> Bool {
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-            && isDir.boolValue
     }
 }

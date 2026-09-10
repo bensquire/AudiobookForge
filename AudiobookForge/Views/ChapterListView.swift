@@ -268,17 +268,7 @@ struct ChapterListView: View {
             probed.map { (url: $0.1, info: $0.2) }
         )
 
-        let added: [Chapter] = importable.map { url, p in
-            Chapter(
-                sourceURL: url,
-                title: p.title?.nilIfEmpty ?? url.deletingPathExtension().lastPathComponent,
-                duration: p.duration,
-                sourceBitrate: p.bitrate,
-                codec: p.codec,
-                sampleRate: p.sampleRate,
-                channels: p.channels
-            )
-        }
+        let added = importable.map { ChapterImport.chapter(for: $0.url, probed: $0.info) }
 
         await MainActor.run {
             if let first = importable.first?.info, project.metadata.isEmpty {
@@ -293,10 +283,4 @@ struct ChapterListView: View {
 
 private func isAudio(_ url: URL) -> Bool {
     LibraryScanner.audioExtensions.contains(url.pathExtension.lowercased())
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
-    }
 }

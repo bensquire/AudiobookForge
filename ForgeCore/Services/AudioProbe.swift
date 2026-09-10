@@ -156,9 +156,6 @@ public enum AudioProbe {
         return stderr.flatMap(parseBitrateFromFFmpegBanner)
     }
 
-    /// `Regex` isn't Sendable but this one is immutable and only read.
-    private nonisolated(unsafe) static let kbpsPattern = /(\d+)\s*kb\/s/
-
     /// Parse `Audio: …, N kb/s` from ffmpeg's stderr banner. Exposed
     /// (internal scope) so AudioProbeBitrateParseTests can pin the
     /// parser against captured outputs from the pinned ffmpeg version.
@@ -170,7 +167,7 @@ public enum AudioProbe {
             // ffmpeg sometimes prints both stream and container bitrate
             // on the same line and the stream value comes second.
             var lastMatch: Int?
-            for match in line.matches(of: kbpsPattern) {
+            for match in line.matches(of: /(\d+)\s*kb\/s/) {
                 lastMatch = Int(match.output.1) ?? lastMatch
             }
             if let kbps = lastMatch {

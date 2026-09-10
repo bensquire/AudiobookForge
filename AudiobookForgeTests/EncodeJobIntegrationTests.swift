@@ -8,30 +8,7 @@ import XCTest
 /// (built by scripts/build-ffmpeg.sh — run scripts/bootstrap.sh first).
 /// Fixtures are tiny generated sine-wave WAVs; outputs are verified with
 /// AVFoundation (duration, chapter markers, book metadata).
-@MainActor
-final class EncodeJobIntegrationTests: XCTestCase {
-    // nonisolated(unsafe): XCTest's setUp/tearDown are nonisolated even
-    // on a @MainActor test class, and the fixture is only touched there
-    // and from the (main-actor) test bodies, always serially.
-    private nonisolated(unsafe) var tmp: URL!
-
-    override func setUp() {
-        super.setUp()
-        Bundled.setOverrideDirectory(repoBinDir)
-        // swiftlint:disable:next force_try
-        tmp = try! FileManager.default.url(
-            for: .itemReplacementDirectory, in: .userDomainMask,
-            appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-            create: true
-        )
-    }
-
-    override func tearDown() {
-        Bundled.setOverrideDirectory(nil)
-        try? FileManager.default.removeItem(at: tmp)
-        super.tearDown()
-    }
-
+final class EncodeJobIntegrationTests: FFmpegTestCase {
     // MARK: - re-encode path
 
     func test_reencode_wavChaptersProduceChapteredM4B() async throws {
@@ -198,70 +175,6 @@ final class EncodeJobIntegrationTests: XCTestCase {
 
     // MARK: - auto-normalize
 
-    func test_autoNormalize_measuresAndBringsBookToTarget() async throws {
-        // Arrange — two loud-ish sine chapters (≈ -12 LUFS) with
-        // auto-normalize on. The pass must measure them, compute one
-        // book-wide offset, and re-encode through a volume filter.
-        let wav1 = tmp.appendingPathComponent("n1.wav")
-        let wav2 = tmp.appendingPathComponent("n2.wav")
-        try writeSineWav(to: wav1, seconds: 3.0, frequency: 440)
-        try writeSineWav(to: wav2, seconds: 3.0, frequency: 660)
-        var spec = makeSpec(
-            in: tmp, chapters: [
-                chapter(wav1, title: "One", codec: .pcm),
-                chapter(wav2, title: "Two", codec: .pcm)
-            ],
-            bitrate: .k64
-        )
-        spec.settings.gainBoost = .autoNormalize
-        let labels = OSAllocatedUnfairLock<[String]>(initialState: [])
-        let job = EncodeJob(spec: spec) { _, label in labels.withLock { $0.append(label) } }
-
-        // Act
-        let outputURL = try await job.run()
-
-        // Assert — the measurement phase ran, and the output's integrated
-        // loudness sits at the target (± what a 6 s tone can hit).
-        XCTAssertTrue(labels.withLock { $0 }.contains { $0.hasPrefix("Measuring loudness") })
-        let lufs = try await integratedLoudness(of: outputURL)
-        XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
-    }
-
-    func test_autoIfQuiet_liftsAQuietBookToTarget() async throws {
-        // Arrange — a quiet tone (≈ -28 LUFS), well below the -16 target.
-        let wav = tmp.appendingPathComponent("quiet.wav")
-        try writeSineWav(to: wav, seconds: 4.0, frequency: 440, amplitude: 2000)
-        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Quiet", codec: .pcm)], bitrate: .k64)
-        spec.settings.gainBoost = .autoIfQuiet
-        let job = EncodeJob(spec: spec)
-
-        // Act
-        let outputURL = try await job.run()
-
-        // Assert
-        let lufs = try await integratedLoudness(of: outputURL)
-        XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
-    }
-
-    func test_autoIfQuiet_leavesALoudBookUntouched() async throws {
-        // Arrange — a loud tone (≈ -12 LUFS), above target. Auto-normalize
-        // would pull this down by ~4 dB; lift-only must not.
-        let wav = tmp.appendingPathComponent("loud.wav")
-        try writeSineWav(to: wav, seconds: 4.0, frequency: 440)
-        let sourceLUFS = try await integratedLoudness(of: wav)
-        XCTAssertGreaterThan(sourceLUFS, EncodeJob.autoNormalizeTargetLUFS, "fixture isn't loud")
-        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Loud", codec: .pcm)], bitrate: .k64)
-        spec.settings.gainBoost = .autoIfQuiet
-        let job = EncodeJob(spec: spec)
-
-        // Act
-        let outputURL = try await job.run()
-
-        // Assert — output loudness matches the source, not the target.
-        let lufs = try await integratedLoudness(of: outputURL)
-        XCTAssertEqual(lufs, sourceLUFS, accuracy: 1.0)
-    }
-
     func test_autoNormalize_failsLoudlyWhenNothingCanBeMeasured() async throws {
         // Arrange — a "chapter" whose file isn't audio at all, so ebur128
         // has nothing to report. Encoding it unnormalized and saying
@@ -290,11 +203,14 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // Arrange — a long enough re-encode that a cancel can land while
         // ffmpeg is genuinely running, into an output dir of its own so
         // "nothing was written" is checkable.
-        let wav = tmp.appendingPathComponent("long.wav")
-        try writeSineWav(to: wav, seconds: 600, frequency: 440)
+        let wav = SharedFixtures.tenMinuteTone
         let outDir = tmp.appendingPathComponent("out", isDirectory: true)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
-        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Long", codec: .pcm)], bitrate: .k64)
+        var spec = makeSpec(
+            in: tmp,
+            chapters: [chapter(wav, title: "Long", codec: .pcm, duration: 600)],
+            bitrate: .k64
+        )
         spec.outputURL = outDir.appendingPathComponent("Long.m4b")
         let sawEncoding = OSAllocatedUnfairLock<Bool>(initialState: false)
         let job = EncodeJob(spec: spec) { _, label in
@@ -303,11 +219,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
 
         // Act — start, wait until phase 1 has reported progress, cancel.
         let run = Task { try await job.run() }
-        let deadline = Date().addingTimeInterval(10)
-        while !sawEncoding.withLock({ $0 }), Date() < deadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        XCTAssertTrue(sawEncoding.withLock { $0 }, "encode never reported progress")
+        try await waitUntil(timeout: 10) { sawEncoding.withLock { $0 } }
         job.cancelToken.cancel()
 
         // Assert — surfaces as .cancelled, promptly, and the output

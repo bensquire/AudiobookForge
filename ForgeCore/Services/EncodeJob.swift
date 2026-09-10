@@ -166,20 +166,12 @@ public final class EncodeJob: Sendable {
             outputURL: partialURL
         )
 
-        // The callback runs on the pipe-reader queue; a plain captured
-        // `var` there is a data race under strict concurrency.
-        let lastPct = OSAllocatedUnfairLock<Int>(initialState: -1)
+        let gate = PercentGate()
         try await FFmpegRunner.run(
             arguments: args,
             totalDuration: spec.totalDuration,
             onProgress: { frac, _ in
-                let pct = Int(frac * 100)
-                let changed = lastPct.withLock { current -> Bool in
-                    guard pct != current else { return false }
-                    current = pct
-                    return true
-                }
-                guard changed else { return }
+                guard let pct = gate.step(frac) else { return }
                 self.onProgress(frac, "Remuxing… \(pct)%")
             },
             cancelToken: cancelToken
@@ -192,10 +184,7 @@ public final class EncodeJob: Sendable {
     /// when no gain is needed (`.off`, or `.autoIfQuiet` on a book that
     /// is already loud enough). The auto modes run a parallel ebur128
     /// measurement pass first.
-    private func resolvePhase0GainFilter(
-        limiter: ConcurrencyLimiter,
-        tokens: [CancelToken]
-    ) async throws -> String? {
+    private func resolvePhase0GainFilter(tokens: [CancelToken]) async throws -> String? {
         switch spec.settings.gainBoost {
         case .off:
             return nil
@@ -217,8 +206,7 @@ public final class EncodeJob: Sendable {
                     let args = Self.ebur128MeasureArgs(input: chapter.sourceURL)
                     let token = tokens[index]
                     group.addTask {
-                        await limiter.acquire()
-                        defer { Task { await limiter.release() } }
+                        // Fan-out is bounded inside captureStderr.
                         let stderr = await FFmpegRunner.captureStderr(
                             arguments: args, cancelToken: token
                         )
@@ -300,8 +288,7 @@ public final class EncodeJob: Sendable {
         let bitrate = Self.resolveBitrate(chapters: spec.chapters, settings: spec.settings)
 
         let totalChapters = spec.chapters.count
-        let cap = min(totalChapters, max(2, ProcessInfo.processInfo.activeProcessorCount), 12)
-        let limiter = ConcurrencyLimiter(max: cap)
+        let limiter = ConcurrencyLimiter(max: min(totalChapters, ConcurrencyLimiter.hardwareCap))
         let aggregator = ProgressAggregator(
             chunkDurations: spec.chapters.map(\.duration)
         )
@@ -316,7 +303,7 @@ public final class EncodeJob: Sendable {
         // boost is a simple synthesis from the picked dB value; auto-
         // normalize parallel-measures every chapter's integrated
         // loudness, combines, and computes the offset to the target.
-        let gainFilter = try await resolvePhase0GainFilter(limiter: limiter, tokens: tokens)
+        let gainFilter = try await resolvePhase0GainFilter(tokens: tokens)
 
         let intermediateURLs: [URL] = try await withThrowingTaskGroup(
             of: (Int, URL).self
@@ -335,11 +322,7 @@ public final class EncodeJob: Sendable {
                 )
                 let chapterDuration = chapter.duration
                 let token = tokens[index]
-                // Per-chunk rounded-percent gate. ffmpeg emits progress
-                // ~10 Hz; the UI only cares about integer-percent steps.
-                // Bailing here avoids ~99% of Task spawns and actor hops
-                // for what would have been no-op UI updates.
-                let lastPct = OSAllocatedUnfairLock<Int>(initialState: -1)
+                let gate = PercentGate()
 
                 group.addTask {
                     await limiter.acquire()
@@ -348,16 +331,8 @@ public final class EncodeJob: Sendable {
                     try await FFmpegRunner.run(
                         arguments: args,
                         totalDuration: chapterDuration,
-                        onProgress: { frac, _ in
-                            let (secs, pct) = Self.phase1ChunkProgress(
-                                fraction: frac, chapterDuration: chapterDuration
-                            )
-                            let changed = lastPct.withLock { current -> Bool in
-                                guard pct != current else { return false }
-                                current = pct
-                                return true
-                            }
-                            guard changed else { return }
+                        onProgress: { frac, secs in
+                            guard gate.step(frac) != nil else { return }
                             Task {
                                 await aggregator.report(chunk: index, seconds: secs)
                                 let frac = await aggregator.phase1Fraction

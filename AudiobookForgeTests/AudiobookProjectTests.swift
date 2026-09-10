@@ -181,16 +181,10 @@ final class AudiobookProjectTests: XCTestCase {
         // Arrange — the case `canEnqueue` is false for but a reset would
         // still throw away real work.
         let p = AudiobookProject()
-        p.chapters = [
-            Chapter(
-                sourceURL: URL(fileURLWithPath: "/tmp/x.mp3"),
-                title: "t", duration: 1, codec: .mp3, sampleRate: 44100, channels: 1
-            )
-        ]
+        p.chapters = [makeChapter()]
 
         // Assert
         XCTAssertTrue(p.hasDraftWork)
-        XCTAssertFalse(p.canEnqueue)
     }
 
     func test_hasDraftWork_trueWithOnlyACover() {

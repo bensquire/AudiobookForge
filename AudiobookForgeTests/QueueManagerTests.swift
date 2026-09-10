@@ -154,17 +154,16 @@ final class QueueManagerTests: QueueTestCase {
         // Arrange — two queued items whose sources don't exist, so the
         // worker would fail them in preflight if it got to them.
         let queue = QueueManager()
-        let a = queue.enqueue(from: makeDraft(outputDir: tmp, title: "a"))
-        let b = queue.enqueue(from: makeDraft(outputDir: tmp, title: "b"))
+        _ = queue.enqueue(from: makeDraft(outputDir: tmp, title: "a"))
+        _ = queue.enqueue(from: makeDraft(outputDir: tmp, title: "b"))
 
         // Act
         await queue.shutdown()
 
         // Assert — nothing is left active and the call unwound.
         XCTAssertFalse(queue.isProcessing)
+        XCTAssertEqual(queue.items.count, 2)
         XCTAssertTrue(queue.items.allSatisfy(\.status.isFinished))
-        XCTAssertNotNil(a)
-        XCTAssertNotNil(b)
     }
 
     func test_shutdown_isIdempotent() async {
@@ -222,14 +221,10 @@ final class QueueManagerTests: QueueTestCase {
         Bundled.setOverrideDirectory(repoBinDir)
         defer { Bundled.setOverrideDirectory(nil) }
         try XCTSkipIf(Bundled.binary("ffmpeg") == nil, "bundled ffmpeg not built")
-        let wav = tmp.appendingPathComponent("long.wav")
-        try writeSineWav(to: wav, seconds: 600, frequency: 440)
         let outDir = tmp.appendingPathComponent("out", isDirectory: true)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         let draft = makeDraft(outputDir: outDir, title: "Long")
-        draft.chapters = [
-            Chapter(sourceURL: wav, title: "Long", duration: 600, codec: .pcm, sampleRate: 44100, channels: 1)
-        ]
+        draft.chapters = [chapter(SharedFixtures.tenMinuteTone, title: "Long", codec: .pcm, duration: 600)]
         let queue = QueueManager()
         let item = try XCTUnwrap(queue.enqueue(from: draft))
         try await waitUntil { item.status.isRunning && item.progressLabel?.hasPrefix("Encoding") == true }
@@ -245,19 +240,4 @@ final class QueueManagerTests: QueueTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outDir.path), [])
         await queue.shutdown()
     }
-
-    // MARK: - helpers
-
-    private func waitUntil(
-        timeout: TimeInterval = 15,
-        _ condition: @MainActor () -> Bool
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            guard Date() < deadline else { throw TimedOut() }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-    }
 }
-
-private struct TimedOut: Error {}

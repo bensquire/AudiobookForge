@@ -1,10 +1,13 @@
 import Foundation
+import os
 
 public enum Bundled {
-    private static let lock = NSLock()
-    // Both guarded by `lock` — every read and write below takes it.
-    private nonisolated(unsafe) static var cache: [String: URL?] = [:]
-    private nonisolated(unsafe) static var _overrideDirectory: URL?
+    private struct State {
+        var cache: [String: URL?] = [:]
+        var overrideDirectory: URL?
+    }
+
+    private static let state = OSAllocatedUnfairLock(initialState: State())
 
     /// Point binary resolution at an explicit directory. Used by unit
     /// tests (which run outside the app bundle) and by the forge CLI
@@ -12,9 +15,10 @@ public enum Bundled {
     /// resolve from). Clears the memoisation cache so a mid-suite
     /// change takes effect.
     public static func setOverrideDirectory(_ url: URL?) {
-        lock.lock(); defer { lock.unlock() }
-        _overrideDirectory = url
-        cache.removeAll()
+        state.withLock {
+            $0.overrideDirectory = url
+            $0.cache.removeAll()
+        }
     }
 
     /// Resolve a binary that ships inside the app bundle's Resources/bin/.
@@ -23,24 +27,14 @@ public enum Bundled {
     /// fallback spawns a subprocess and `binary("ffmpeg")` gets called
     /// once per chapter during a drag-drop probe.
     public static func binary(_ name: String) -> URL? {
-        lock.lock()
-        if let cached = cache[name] {
-            lock.unlock()
-            return cached
-        }
-        lock.unlock()
-
-        let resolved = resolve(name)
-        lock.lock()
-        cache[name] = resolved
-        lock.unlock()
+        let (cached, override) = state.withLock { ($0.cache[name], $0.overrideDirectory) }
+        if let cached { return cached }
+        let resolved = resolve(name, override: override)
+        state.withLock { $0.cache[name] = resolved }
         return resolved
     }
 
-    private static func resolve(_ name: String) -> URL? {
-        lock.lock()
-        let override = _overrideDirectory
-        lock.unlock()
+    private static func resolve(_ name: String, override: URL?) -> URL? {
         if let override {
             let candidate = override.appendingPathComponent(name)
             return FileManager.default.isExecutableFile(atPath: candidate.path)

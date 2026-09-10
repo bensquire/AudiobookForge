@@ -74,9 +74,6 @@ public struct LibraryScanner {
     /// for "already forged".
     private static let mp4Extensions: Set<String> = ["m4a", "m4b", "aac"]
 
-    /// `Regex` isn't Sendable but this one is immutable and only read.
-    private nonisolated(unsafe) static let discFolderPattern = /^(disc|disk|cd)\W*\d*$/.ignoresCase()
-
     private let chapterFormat: ChapterProbe
 
     public init(chapterFormat: @escaping ChapterProbe) {
@@ -159,7 +156,7 @@ public struct LibraryScanner {
     }
 
     static func isDiscFolder(_ url: URL) -> Bool {
-        url.lastPathComponent.firstMatch(of: discFolderPattern) != nil
+        url.lastPathComponent.firstMatch(of: /^(disc|disk|cd)\W*\d*$/.ignoresCase()) != nil
     }
 
     // MARK: - Classification
@@ -238,9 +235,7 @@ private extension FileManager {
     /// A .cue next to the book (same dir for a folder-book, or beside a
     /// lone-file book) hints that chapters live outside the audio.
     func siblingCueExists(near path: URL) -> Bool {
-        var isDir: ObjCBool = false
-        _ = fileExists(atPath: path.path, isDirectory: &isDir)
-        let dir = isDir.boolValue ? path : path.deletingLastPathComponent()
+        let dir = isDirectory(at: path) ? path : path.deletingLastPathComponent()
         let entries = (try? contentsOfDirectory(atPath: dir.path)) ?? []
         return entries.contains { $0.lowercased().hasSuffix(".cue") }
     }

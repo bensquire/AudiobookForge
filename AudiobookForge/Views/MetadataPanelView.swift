@@ -167,8 +167,6 @@ struct MetadataPanelView: View {
                 let found = try await MetadataSearch.search(query: q, provider: provider)
                 guard !Task.isCancelled else { return }
                 results = Array(found.prefix(8))
-            } catch is CancellationError {
-                return
             } catch {
                 guard !Task.isCancelled else { return }
                 searchError = (error as? LocalizedError)?.errorDescription ?? "\(error)"

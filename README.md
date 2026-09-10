@@ -71,14 +71,14 @@ so `forge` (the CLI) is only compiled by `scripts/build.sh` / CI, not by
 ## Lint & format
 
 ```bash
-./scripts/install-lint-tools.sh   # pinned SwiftFormat + SwiftLint into build/tools (what CI uses)
-./scripts/format.sh               # auto-fix what SwiftFormat / SwiftLint can
-./scripts/lint.sh                 # check-only; CI runs exactly this and fails on diff
+./scripts/format.sh    # auto-fix what SwiftFormat / SwiftLint can
+./scripts/lint.sh      # check-only; CI runs exactly this and fails on diff
 ```
 
 Both scripts cover every Swift target (`AudiobookForge`, `ForgeCore`,
-`ForgeCLI`, tests) and prefer the pinned tools in `build/tools/bin` when
-present, falling back to whatever is on `PATH`.
+`ForgeCLI`, tests) and run pinned SwiftFormat / SwiftLint binaries that
+`scripts/install-lint-tools.sh` downloads into `build/tools/bin` on first
+use, so local and CI results are identical.
 
 Config lives in `.swiftformat` and `.swiftlint.yml`. SwiftFormat handles
 whitespace, line wrapping, redundant `self`, trailing-comma policy, etc.
@@ -111,6 +111,7 @@ scripts/
 ├── build.sh                   # xcodebuild wrapper (debug | release | archive)
 ├── test.sh                    # run the test suite (whole, or -only <Class>)
 ├── format.sh / lint.sh        # SwiftFormat + SwiftLint (write / check-only)
+├── lint-common.sh             # shared target list + pinned tool paths
 ├── install-lint-tools.sh      # pinned lint tool binaries into build/tools
 ├── release.sh                 # local signed release dry-run
 ├── notarize.sh / make-dmg.sh  # notary submission + DMG packaging

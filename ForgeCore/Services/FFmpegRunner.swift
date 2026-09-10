@@ -23,12 +23,15 @@ public enum FFmpegRunner {
         }
     }
 
-    /// Run ffmpeg. `totalDuration` lets us turn `time=` lines into a 0…1 fraction.
+    /// Run ffmpeg. Each `time=` report reaches `onProgress` twice over:
+    /// as a 0…1 fraction of `totalDuration` (for a bar) and as the raw
+    /// seconds of output ffmpeg has written (for anything that sums
+    /// across chunks).
     @discardableResult
     public static func run(
         arguments: [String],
         totalDuration: TimeInterval,
-        onProgress: @escaping @Sendable (Double, String) -> Void,
+        onProgress: @escaping @Sendable (_ fraction: Double, _ seconds: TimeInterval) -> Void,
         cancelToken: CancelToken = .init()
     ) async throws -> String {
         guard let ffmpeg = Bundled.binary("ffmpeg") else { throw RunError.notFound }
@@ -56,7 +59,7 @@ public enum FFmpegRunner {
                     let frac = totalDuration > 0
                         ? min(1.0, max(0.0, secs / totalDuration))
                         : 0
-                    onProgress(frac, line.trimmingCharacters(in: .whitespaces))
+                    onProgress(frac, secs)
                 }
             }
         }
@@ -83,16 +86,14 @@ public enum FFmpegRunner {
             cancelToken.cancel()
         }
 
-        // Drain any tail bytes ffmpeg flushed just before exit.
+        // Drain any tail bytes ffmpeg flushed just before exit, through
+        // the same buffer so a line straddling the last two reads stays
+        // whole, then flush whatever unterminated remainder is left.
         stderr.fileHandleForReading.readabilityHandler = nil
-        let remaining = stderr.fileHandleForReading.readDataToEndOfFile()
-        if !remaining.isEmpty {
-            for line in String(decoding: remaining, as: UTF8.self)
-                .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
-            {
-                tail.append(String(line))
-            }
+        for line in buffer.append(stderr.fileHandleForReading.readDataToEndOfFile()) {
+            tail.append(line)
         }
+        if let last = buffer.flush() { tail.append(last) }
 
         if cancelToken.isCancelled { throw RunError.cancelled }
         if exitStatus != 0 {
@@ -162,12 +163,8 @@ public enum FFmpegRunner {
         }
     }
 
-    /// Shared cap on concurrent `captureStderr` children. Same formula
-    /// as the parallel-encode fan-out so a measurement pass under the
-    /// encode limiter is never throttled harder than the encode itself.
-    private static let probeLimiter = ConcurrencyLimiter(
-        max: min(max(2, ProcessInfo.processInfo.activeProcessorCount), 12)
-    )
+    /// Shared cap on concurrent `captureStderr` children.
+    private static let probeLimiter = ConcurrencyLimiter(max: ConcurrencyLimiter.hardwareCap)
 
     /// Register `process.terminate()` on the token. Must be called only
     /// AFTER a successful `process.run()` — `terminate()` on a
@@ -293,6 +290,16 @@ final class LineBuffer: @unchecked Sendable {
             lines.append(String(decoding: lineData, as: UTF8.self))
         }
         return lines
+    }
+
+    /// Whatever is buffered without a terminator (ffmpeg's last line
+    /// often has none). Empties the buffer.
+    func flush() -> String? {
+        lock.lock(); defer { lock.unlock() }
+        guard !data.isEmpty else { return nil }
+        let line = String(decoding: data, as: UTF8.self)
+        data.removeAll()
+        return line
     }
 }
 
