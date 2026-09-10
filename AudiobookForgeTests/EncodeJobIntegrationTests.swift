@@ -42,7 +42,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         try writeSineWav(to: wav1, seconds: 1.0, frequency: 440)
         try writeSineWav(to: wav2, seconds: 1.0, frequency: 660)
         let spec = makeSpec(
-            chapters: [
+            in: tmp, chapters: [
                 chapter(wav1, title: "Opening", codec: .pcm),
                 chapter(wav2, title: "Closing", codec: .pcm)
             ],
@@ -89,10 +89,10 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // Arrange — pre-encode two WAVs to uniform AAC with the same
         // pipeline the app uses, then feed them back as chapters set to
         // "Match source" bitrate (the remux trigger).
-        let m4a1 = try await makeAacFixture(name: "a", frequency: 440)
-        let m4a2 = try await makeAacFixture(name: "b", frequency: 660)
+        let m4a1 = try await makeAacFixture(in: tmp, name: "a", frequency: 440)
+        let m4a2 = try await makeAacFixture(in: tmp, name: "b", frequency: 660)
         let spec = makeSpec(
-            chapters: [
+            in: tmp, chapters: [
                 chapter(m4a1, title: "One", codec: .aac),
                 chapter(m4a2, title: "Two", codec: .aac)
             ],
@@ -129,7 +129,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // fan-out. Now it must surface as a clean .cancelled.
         let wav = tmp.appendingPathComponent("ch.wav")
         try writeSineWav(to: wav, seconds: 1.0, frequency: 440)
-        let spec = makeSpec(chapters: [chapter(wav, title: "X", codec: .pcm)], bitrate: .k64)
+        let spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "X", codec: .pcm)], bitrate: .k64)
         let job = EncodeJob(spec: spec)
         job.cancelToken.cancel()
 
@@ -207,7 +207,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         try writeSineWav(to: wav1, seconds: 3.0, frequency: 440)
         try writeSineWav(to: wav2, seconds: 3.0, frequency: 660)
         var spec = makeSpec(
-            chapters: [
+            in: tmp, chapters: [
                 chapter(wav1, title: "One", codec: .pcm),
                 chapter(wav2, title: "Two", codec: .pcm)
             ],
@@ -227,20 +227,11 @@ final class EncodeJobIntegrationTests: XCTestCase {
         XCTAssertEqual(lufs, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
     }
 
-    /// Integrated loudness of `url` via the same ebur128 pass the encoder
-    /// uses for its own measurement.
-    private func integratedLoudness(of url: URL) async throws -> Double {
-        let measured = await FFmpegRunner.captureStderr(
-            arguments: EncodeJob.ebur128MeasureArgs(input: url)
-        )
-        return try XCTUnwrap(try EncodeJob.parseEbur128IntegratedLUFS(XCTUnwrap(measured)))
-    }
-
     func test_autoIfQuiet_liftsAQuietBookToTarget() async throws {
         // Arrange — a quiet tone (≈ -28 LUFS), well below the -16 target.
         let wav = tmp.appendingPathComponent("quiet.wav")
         try writeSineWav(to: wav, seconds: 4.0, frequency: 440, amplitude: 2000)
-        var spec = makeSpec(chapters: [chapter(wav, title: "Quiet", codec: .pcm)], bitrate: .k64)
+        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Quiet", codec: .pcm)], bitrate: .k64)
         spec.settings.gainBoost = .autoIfQuiet
         let job = EncodeJob(spec: spec)
 
@@ -259,7 +250,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         try writeSineWav(to: wav, seconds: 4.0, frequency: 440)
         let sourceLUFS = try await integratedLoudness(of: wav)
         XCTAssertGreaterThan(sourceLUFS, EncodeJob.autoNormalizeTargetLUFS, "fixture isn't loud")
-        var spec = makeSpec(chapters: [chapter(wav, title: "Loud", codec: .pcm)], bitrate: .k64)
+        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Loud", codec: .pcm)], bitrate: .k64)
         spec.settings.gainBoost = .autoIfQuiet
         let job = EncodeJob(spec: spec)
 
@@ -277,7 +268,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         // Done would be worse than failing.
         let junk = tmp.appendingPathComponent("junk.wav")
         try Data("not a wav".utf8).write(to: junk)
-        var spec = makeSpec(chapters: [chapter(junk, title: "Junk", codec: .pcm)], bitrate: .k64)
+        var spec = makeSpec(in: tmp, chapters: [chapter(junk, title: "Junk", codec: .pcm)], bitrate: .k64)
         spec.settings.gainBoost = .autoNormalize
         let job = EncodeJob(spec: spec)
 
@@ -303,7 +294,7 @@ final class EncodeJobIntegrationTests: XCTestCase {
         try writeSineWav(to: wav, seconds: 600, frequency: 440)
         let outDir = tmp.appendingPathComponent("out", isDirectory: true)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
-        var spec = makeSpec(chapters: [chapter(wav, title: "Long", codec: .pcm)], bitrate: .k64)
+        var spec = makeSpec(in: tmp, chapters: [chapter(wav, title: "Long", codec: .pcm)], bitrate: .k64)
         spec.outputURL = outDir.appendingPathComponent("Long.m4b")
         let sawEncoding = OSAllocatedUnfairLock<Bool>(initialState: false)
         let job = EncodeJob(spec: spec) { _, label in
@@ -329,85 +320,5 @@ final class EncodeJobIntegrationTests: XCTestCase {
         }
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: outDir.path)
         XCTAssertEqual(leftovers, [], "cancel left files behind: \(leftovers)")
-    }
-
-    // MARK: - fixture + spec helpers
-
-    /// Encode a 1 s sine WAV to AAC using the app's own phase-1 arg
-    /// builder, so remux fixtures share the exact codec params the app
-    /// would produce.
-    private func makeAacFixture(name: String, frequency: Double) async throws -> URL {
-        let wav = tmp.appendingPathComponent("\(name).wav")
-        let m4a = tmp.appendingPathComponent("\(name).m4a")
-        try writeSineWav(to: wav, seconds: 1.0, frequency: frequency)
-        _ = try await FFmpegRunner.run(
-            arguments: EncodeJob.phase1Args(
-                input: wav, output: m4a, bitrate: "64k", sampleRate: 44100, channels: 1
-            ),
-            totalDuration: 1.0,
-            onProgress: { _, _ in }
-        )
-        return m4a
-    }
-
-    private func chapter(
-        _ url: URL, title: String, codec: ForgeCore.AudioCodec
-    ) -> Chapter {
-        Chapter(
-            sourceURL: url,
-            title: title,
-            duration: 1.0,
-            sourceBitrate: 64000,
-            codec: codec,
-            sampleRate: 44100,
-            channels: 1
-        )
-    }
-
-    private func makeSpec(chapters: [Chapter], bitrate: EncodeSettings.Bitrate) -> EncodeSpec {
-        var metadata = BookMetadata()
-        metadata.title = "Integration Book"
-        metadata.author = "Test Author"
-        var settings = EncodeSettings()
-        settings.bitrate = bitrate
-        settings.outputDirectory = tmp
-        return EncodeSpec(
-            chapters: chapters,
-            metadata: metadata,
-            settings: settings,
-            outputURL: tmp.appendingPathComponent("Integration Book.m4b")
-        )
-    }
-
-    // MARK: - AVFoundation verification helpers
-
-    private func loadChapterTitles(_ asset: AVURLAsset) async throws -> [String] {
-        // ffmpeg writes chapter titles with an "und" locale, which a
-        // preferred-language lookup won't match — ask the asset what
-        // locales it actually has.
-        let locales = try await asset.load(.availableChapterLocales)
-        guard let locale = locales.first else { return [] }
-        let groups = try await asset.loadChapterMetadataGroups(
-            withTitleLocale: locale, containingItemsWithCommonKeys: [.commonKeyTitle]
-        )
-        var titles: [String] = []
-        for group in groups {
-            let items = AVMetadataItem.metadataItems(
-                from: group.items, filteredByIdentifier: .commonIdentifierTitle
-            )
-            if let first = items.first, let value = try await first.load(.stringValue) {
-                titles.append(value)
-            }
-        }
-        return titles
-    }
-
-    private func loadCommonTitle(_ asset: AVURLAsset) async throws -> String? {
-        let meta = try await asset.load(.commonMetadata)
-        let items = AVMetadataItem.metadataItems(
-            from: meta, filteredByIdentifier: .commonIdentifierTitle
-        )
-        guard let first = items.first else { return nil }
-        return try await first.load(.stringValue)
     }
 }
