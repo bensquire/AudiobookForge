@@ -12,8 +12,7 @@ Modular, machine-readable rules for working on AudiobookForge. Each file is one
 rule, named `{section}-{rule-name}.md`, with YAML frontmatter Claude Code reads:
 a rule with `paths` loads only when a matching file is in play; one without
 applies always. `_sections.md` defines the sections and their order;
-`_template.md` is the shape of a new rule. Brought over from the Prospect repo
-and reworded for this codebase; the panorama-specific rules stayed behind.
+`_template.md` is the shape of a new rule.
 
 ## Rules Index
 
@@ -31,7 +30,7 @@ and reworded for this codebase; the panorama-specific rules stayed behind.
 - [workflow-checking-work](workflow-checking-work.md) - Lint, the whole suite, then the app or the CLI on real files
 - [workflow-commit-messages](workflow-commit-messages.md) - Prose, with the measurements
 - [workflow-diagnostics](workflow-diagnostics.md) - Env-gated to keep, separate file to throw away
-- [workflow-todo-entries](workflow-todo-entries.md) - One line per feature, under its status section
+- [workflow-todo-entries](workflow-todo-entries.md) - One checklist line per feature; the reasoning lives in the commit
 
 ### Quality
 
@@ -43,7 +42,7 @@ and reworded for this codebase; the panorama-specific rules stayed behind.
 - [quality-performant](quality-performant.md) - Fast where it counts, and measured
 - [quality-secure](quality-secure.md) - Sandboxed; two HTTPS hosts; one child process; nothing overwritten
 - [quality-comments-carry-measurements](quality-comments-carry-measurements.md) - Short, says why, carries the number; never restates a name
-- [quality-formatting-is-the-tools](quality-formatting-is-the-tools.md) - SwiftFormat and SwiftLint decide, at pinned versions
+- [quality-formatting-is-the-tools](quality-formatting-is-the-tools.md) - SwiftFormat decides, at a pinned version
 - [quality-images-minified](quality-images-minified.md) - The right container, lossless first, then lossy to the edge, judged at 1:1
 
 ### Testing

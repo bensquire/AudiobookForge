@@ -31,9 +31,9 @@ to them:
 ```
 scripts/bootstrap.sh     # deps + build the bundled ffmpeg (once, ~5 min)
 scripts/build.sh debug   # AudiobookForge.app into build/Build/Products/Debug, ad-hoc signed and sandboxed
-scripts/test.sh          # builds the forge CLI, then the whole suite (~210 tests, ~4 s)
-scripts/lint.sh          # pinned SwiftFormat + SwiftLint over every target; CI runs exactly this
-scripts/format.sh        # the same tools, writing
+scripts/test.sh          # builds the forge CLI, then the whole suite (~230 tests, ~4 s)
+scripts/lint.sh          # pinned SwiftFormat, no line over 130 columns, no try!/force unwrap/IUO; CI runs exactly this
+scripts/format.sh        # SwiftFormat, writing
 FORGE_FFMPEG_DIR=AudiobookForge/Resources/bin build/Build/Products/Debug/forge scan -c <config>
 ```
 
@@ -50,7 +50,9 @@ manifest. Use a scratch config with its own `stateDir:`.
   a matching file is in play.
 - `.claude/hooks/` — format, lint and measure every Swift file as it is
   edited, with the pinned tools from `scripts/install-lint-tools.sh`.
-- `.claude/skills/run-app/` — how to build, launch and drive the app by
+- `.claude/skills/build/` — building, testing, linting and packaging the app
+  and the CLI: prerequisites, timings, and what CI and the pre-commit hook run.
+- `.claude/skills/run-app/` — how to launch and drive the app by
   accessibility identifier for an end-to-end check.
 - `.claude/skills/apple-docs/` — how to ask `scrapple`, the offline index of
   Apple's documentation, before using a system API or building what the

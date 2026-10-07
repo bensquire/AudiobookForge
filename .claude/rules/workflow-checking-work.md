@@ -12,11 +12,13 @@ paths: ["ForgeCore/**", "AudiobookForge/**", "ForgeCLI/**", "AudiobookForgeTests
 
 Before saying a change is done:
 
-1. **`scripts/lint.sh`** — SwiftFormat and SwiftLint at the pinned versions,
-   over every target. The edit hooks run them per file; this is the whole tree.
+1. **`scripts/lint.sh`** — SwiftFormat at the pinned version, no line over 130
+   columns, and no `try!`, force unwrap or implicitly unwrapped optional, over
+   every target. The edit hooks run per file; this is the
+   whole tree.
 2. **`scripts/test.sh`**, the whole suite. It builds the `forge` CLI first
    (the test bundle links ForgeCore directly and would never compile the CLI
-   otherwise), then runs ~210 tests in a few seconds. The audio tests need the
+   otherwise), then runs ~230 tests in a few seconds. The audio tests need the
    bundled ffmpeg (`scripts/build-ffmpeg.sh`); they skip, not fail, without it.
 3. **The real thing**, for anything touching encoding, probing or the queue:
    encode a real book in the relaunched app, or run `forge scan` against a

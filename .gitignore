@@ -1,5 +1,7 @@
 # Xcode
 build/
+# The build skill shares the name; it is source, not output.
+!.claude/skills/build/
 DerivedData/
 *.xcodeproj
 *.xcworkspace

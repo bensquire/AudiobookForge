@@ -1,11 +1,14 @@
 ---
 name: run-app
-description: Build, launch, and drive the AudiobookForge macOS app UI programmatically (AppleScript + AXIdentifiers) to verify changes end-to-end
+description: Launch and drive the AudiobookForge macOS app UI programmatically (AppleScript + AXIdentifiers) to verify changes end-to-end. Use when relaunching the app for a trial, clicking through it, taking a screenshot of it, or checking an encode's output. Building, the test suite and lint are the build skill.
 ---
 
 # Run and drive AudiobookForge
 
 ## Build & launch
+
+The `build` skill covers building, tests and lint in full; this is the short path
+to a running app.
 
 ```bash
 scripts/build.sh                 # xcodegen + Debug build, ~1 min warm

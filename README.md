@@ -71,21 +71,23 @@ so `forge` (the CLI) is only compiled by `scripts/build.sh` / CI, not by
 ## Lint & format
 
 ```bash
-./scripts/format.sh    # auto-fix what SwiftFormat / SwiftLint can
+./scripts/format.sh    # auto-fix what SwiftFormat can
 ./scripts/lint.sh      # check-only; CI runs exactly this and fails on diff
 ```
 
 Both scripts cover every Swift target (`AudiobookForge`, `ForgeCore`,
-`ForgeCLI`, tests) and run pinned SwiftFormat / SwiftLint binaries that
+`ForgeCLI`, tests) and run a pinned SwiftFormat binary that
 `scripts/install-lint-tools.sh` downloads into `build/tools/bin` on first
 use, so local and CI results are identical.
 
-Config lives in `.swiftformat` and `.swiftlint.yml`. SwiftFormat handles
-whitespace, line wrapping, redundant `self`, trailing-comma policy, etc.
-SwiftLint enforces a curated subset (we disable the rules that fight
-idiomatic patterns — short loop vars, deliberate trailing commas, modern
-one-liner braces — and opt into the high-signal ones like
-`first_where`, `redundant_nil_coalescing`, `prefer_self_in_static_references`).
+Config lives in `.swiftformat`. SwiftFormat handles whitespace, line
+wrapping at 110 columns, redundant `self` and `return`, unused arguments,
+trailing-comma policy and the rest of its rule set. `lint.sh` also fails any
+line over 130 columns, which catches a long string or comment SwiftFormat
+cannot wrap, and runs Xcode's `swift format` for three rules SwiftFormat
+lacks: no `try!`, no force unwrap, no implicitly unwrapped optional
+(`scripts/safety-rules.swift-format`; files that import XCTest are exempt
+from the first two).
 
 ## Project layout
 
@@ -110,9 +112,9 @@ scripts/
 ├── build-ffmpeg.sh            # build the bundled ffmpeg + libfdk_aac
 ├── build.sh                   # xcodebuild wrapper (debug | release | archive)
 ├── test.sh                    # run the test suite (whole, or -only <Class>)
-├── format.sh / lint.sh        # SwiftFormat + SwiftLint (write / check-only)
+├── format.sh / lint.sh        # SwiftFormat (write / check-only), plus a line-length check
 ├── lint-common.sh             # shared target list + pinned tool paths
-├── install-lint-tools.sh      # pinned lint tool binaries into build/tools
+├── install-lint-tools.sh      # pinned SwiftFormat binary into build/tools
 ├── release.sh                 # local signed release dry-run
 ├── notarize.sh / make-dmg.sh  # notary submission + DMG packaging
 └── ExportOptions.plist        # developer-id export options (TEAM_ID templated)
