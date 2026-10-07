@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the exact SwiftFormat + SwiftLint versions the lint gate is
+# Install the exact SwiftFormat version the lint gate is
 # tuned for, into build/tools/bin (gitignored). scripts/lint.sh and
 # scripts/format.sh put that directory first on PATH when it exists.
 #
@@ -15,7 +15,6 @@
 set -euo pipefail
 
 SWIFTFORMAT_VERSION="0.63.0"
-SWIFTLINT_VERSION="0.65.1"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/build/tools/bin"
@@ -46,15 +45,5 @@ else
     "swiftformat" "$BIN/swiftformat"
 fi
 
-if have_version "$BIN/swiftlint" "$SWIFTLINT_VERSION"; then
-  echo "==> swiftlint $SWIFTLINT_VERSION already installed"
-else
-  echo "==> installing swiftlint $SWIFTLINT_VERSION"
-  fetch_zip \
-    "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/portable_swiftlint.zip" \
-    "swiftlint" "$BIN/swiftlint"
-fi
-
 echo
 echo "swiftformat: $("$BIN/swiftformat" --version)"
-echo "swiftlint:   $("$BIN/swiftlint" --version)"

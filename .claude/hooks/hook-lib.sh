@@ -15,7 +15,7 @@ hook_file_path() {
 }
 
 # The pinned tool binary from scripts/install-lint-tools.sh if it is there, else
-# whatever is on PATH, else nothing. $1 = tool name (swiftformat | swiftlint).
+# whatever is on PATH, else nothing. $1 = tool name (swiftformat).
 hook_tool() {
   local pinned="${CLAUDE_PROJECT_DIR:-.}/build/tools/bin/$1"
   if [ -x "$pinned" ]; then

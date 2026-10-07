@@ -69,9 +69,7 @@ enum SharedFixtures {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("AudiobookForgeTests-\(ProcessInfo.processInfo.processIdentifier)")
         let url = dir.appendingPathComponent("ten-minute-tone.wav")
-        // swiftlint:disable:next force_try
         try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // swiftlint:disable:next force_try
         try! writeSineWav(to: url, seconds: 600, frequency: 440, sampleRate: 8000)
         return url
     }()

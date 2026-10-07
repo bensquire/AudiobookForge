@@ -6,7 +6,6 @@ final class LibraryScannerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // swiftlint:disable:next force_try
         tmp = try! FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),

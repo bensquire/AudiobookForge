@@ -8,7 +8,6 @@ final class OutputPathResolverTests: XCTestCase {
         super.setUp()
         // Arrange (shared) — a fresh empty directory for every test so
         // collision behaviour is deterministic.
-        // swiftlint:disable:next force_try
         tmp = try! FileManager.default.url(
             for: .itemReplacementDirectory, in: .userDomainMask,
             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),

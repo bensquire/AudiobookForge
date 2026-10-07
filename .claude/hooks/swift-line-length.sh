@@ -7,7 +7,7 @@
 # against .swiftformat's `--maxwidth` after formatting, and the offenders are
 # reported with their widths so the fix needs no second pass to find them.
 #
-# Advisory (exit 2) rather than blocking, like swiftlint.sh.
+# Advisory (exit 2) rather than blocking, so a long line never stops an edit.
 set -euo pipefail
 
 # shellcheck source=.claude/hooks/hook-lib.sh

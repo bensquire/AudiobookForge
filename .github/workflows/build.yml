@@ -25,7 +25,7 @@ jobs:
       - name: Install build tools
         run: brew install xcodegen pkg-config
 
-      # lint.sh installs its own pinned SwiftFormat / SwiftLint binaries
+      # lint.sh installs its own pinned SwiftFormat binary
       # (scripts/install-lint-tools.sh) rather than using the image's.
       - name: Lint
         run: ./scripts/lint.sh
