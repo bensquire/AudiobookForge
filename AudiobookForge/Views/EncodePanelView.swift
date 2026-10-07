@@ -93,15 +93,8 @@ struct EncodePanelView: View {
         }
     }
 
-    /// Labelled row. The label flips between the generic "Output folder"
-    /// when nothing is picked and the actual destination directory once a
-    /// folder is selected (folder name + any template subdirs that will
-    /// be created from metadata). The button stays as a stable "Change…"
-    /// affordance.
-    /// "Output: [📁 Folder name ▾]" — the labelled-button idiom used by
-    /// Permute, Bakery, Audiobook Builder etc. The button itself carries
-    /// the current selection (last path component); full path lives in
-    /// the tooltip.
+    /// "Output: [📁 Folder]" — the button names the chosen folder, or asks
+    /// for one; the full path is its tooltip.
     private var outputControl: some View {
         let dir = project.settings.outputDirectory
         return HStack(spacing: 8) {
@@ -152,9 +145,8 @@ struct EncodePanelView: View {
     /// because channel info isn't known otherwise.
     private var outputFormatLabel: String? {
         guard let first = project.chapters.first else { return nil }
-        let bitrate = EncodeJob.resolveBitrate(
-            chapters: project.chapters, settings: project.settings
-        ).replacingOccurrences(of: "k", with: " kbps")
+        let kbps = EncodeJob.resolveBitrateKbps(chapters: project.chapters, settings: project.settings)
+        let bitrate = "\(kbps) kbps"
         let channels = channelLayoutLabel(first.channels)
         return [bitrate, channels, "AAC", project.settings.gainBoost.suffix]
             .filter { !$0.isEmpty }

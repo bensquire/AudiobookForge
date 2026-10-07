@@ -54,9 +54,8 @@ struct ChapterListView: View {
         } message: {
             Text(
                 skippedFinishedBooks.joined(separator: "\n")
-                    + "\n\nThese files already contain chapter markers — "
-                    + "importing them here would flatten the book into a "
-                    + "single chapter. Nothing to forge."
+                    + "\n\nThese files already contain chapter markers, so they weren't added: "
+                    + "importing one here would flatten its book into a single chapter."
             )
         }
         .overlay(alignment: .center) {
@@ -218,36 +217,8 @@ struct ChapterListView: View {
         }
 
         let existingPaths = Set(project.chapters.map(\.sourceURL.standardizedFileURL.path))
-        let files = await Task.detached(priority: .userInitiated) { () -> [URL] in
-            var results: [URL] = []
-            for url in urls {
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
-                if isDir.boolValue {
-                    // Use NSDirectoryEnumerator.allObjects — the for-in
-                    // form trips a Swift 6 `makeIterator` warning in
-                    // async contexts. skipsHiddenFiles keeps AppleDouble
-                    // sidecars ("._Chapter 01.mp3" on FAT/exFAT drives)
-                    // from becoming zero-duration junk chapters.
-                    let walker = FileManager.default.enumerator(
-                        at: url,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    )
-                    let all = walker?.allObjects.compactMap { $0 as? URL } ?? []
-                    results.append(contentsOf: all.filter(isAudio))
-                } else if isAudio(url) {
-                    results.append(url)
-                }
-            }
-            // Natural sort so "Chapter 2" precedes "Chapter 10".
-            results
-                .sort {
-                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-                }
-            // Same file dropped twice (or already in the chapter list)
-            // shouldn't become a duplicate chapter.
-            return ChapterImport.dedupe(results, existingPaths: existingPaths)
+        let files = await Task.detached(priority: .userInitiated) {
+            ChapterImport.audioFiles(in: urls, existingPaths: existingPaths)
         }.value
 
         // Probe concurrently — serial awaits stall drag-drop on long books.
@@ -271,16 +242,9 @@ struct ChapterListView: View {
         let added = importable.map { ChapterImport.chapter(for: $0.url, probed: $0.info) }
 
         await MainActor.run {
-            if let first = importable.first?.info, project.metadata.isEmpty {
-                if project.metadata.title.isEmpty { project.metadata.title = first.album ?? "" }
-                if project.metadata.author.isEmpty { project.metadata.author = first.artist ?? "" }
-            }
+            project.metadata = ChapterImport.metadata(project.metadata, seededFrom: importable.first?.info)
             project.chapters.append(contentsOf: added)
             skippedFinishedBooks += skippedNames
         }
     }
-}
-
-private func isAudio(_ url: URL) -> Bool {
-    LibraryScanner.audioExtensions.contains(url.pathExtension.lowercased())
 }

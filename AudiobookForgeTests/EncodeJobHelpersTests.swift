@@ -122,8 +122,8 @@ final class EncodeJobHelpersTests: XCTestCase {
 
         // Assert — 16 MB payload; estimate must cover payload×2 but stay
         // within an order of magnitude (it's a preflight, not an invoice).
-        XCTAssertGreaterThan(bytes, 32_000_000)
-        XCTAssertLessThan(bytes, 64_000_000)
+        XCTAssertGreaterThan(bytes, 32_000_000, "estimate of \(bytes) bytes doesn't cover the payload twice")
+        XCTAssertLessThan(bytes, 64_000_000, "estimate of \(bytes) bytes is past four times the payload")
     }
 
     func test_estimatedRequiredBytes_remuxPathNeedsLessHeadroom() {
@@ -144,7 +144,11 @@ final class EncodeJobHelpersTests: XCTestCase {
         )
 
         // Assert — remux writes the payload once, re-encode twice.
-        XCTAssertLessThan(remuxBytes, reencodeBytes)
+        XCTAssertLessThan(
+            remuxBytes,
+            reencodeBytes,
+            "remux \(remuxBytes) bytes vs re-encode \(reencodeBytes) bytes"
+        )
     }
 
     // MARK: - isDecodableImage
@@ -153,7 +157,7 @@ final class EncodeJobHelpersTests: XCTestCase {
         // Arrange — 1×1 red PNG
         let png = try XCTUnwrap(Data(
             base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
-        ))
+        ), "the PNG fixture isn't valid base64")
 
         // Act / Assert
         XCTAssertTrue(EncodeJob.isDecodableImage(png))
@@ -266,12 +270,14 @@ final class EncodeJobHelpersTests: XCTestCase {
         let unhidden = EncodeJob.resolveOutputURL(
             in: base, metadata: hidden, template: "{author}/{title}.m4b"
         )
+        let lone = EncodeJob.sanitize(".")
+        let dotsOnly = EncodeJob.sanitize("...")
 
         // Assert
         XCTAssertEqual(escaped.standardizedFileURL.path, "/out/_/Dune/Dune.m4b")
         XCTAssertEqual(unhidden.path, "/out/Herbert/Dune.m4b")
-        XCTAssertEqual(EncodeJob.sanitize("."), "_")
-        XCTAssertEqual(EncodeJob.sanitize("..."), "")
+        XCTAssertEqual(lone, "_")
+        XCTAssertEqual(dotsOnly, "")
     }
 
     func test_resolveOutputURL_sanitisesIllegalFilenameCharacters() {

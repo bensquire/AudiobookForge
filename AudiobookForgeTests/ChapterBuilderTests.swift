@@ -46,12 +46,12 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
 
         // Assert
-        XCTAssertTrue(text.hasPrefix(";FFMETADATA1\n"))
-        XCTAssertTrue(text.contains("title=Dune\n"))
-        XCTAssertTrue(text.contains("artist=Frank Herbert\n"))
-        XCTAssertTrue(text.contains("date=1965\n"))
+        XCTAssertTrue(text.hasPrefix(";FFMETADATA1\n"), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("title=Dune\n"), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("artist=Frank Herbert\n"), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("date=1965\n"), "ffmetadata was:\n\(text)")
         // Narrator is mapped onto the de-facto `composer` tag.
-        XCTAssertTrue(text.contains("composer=Scott Brick\n"))
+        XCTAssertTrue(text.contains("composer=Scott Brick\n"), "ffmetadata was:\n\(text)")
     }
 
     func test_ffmetadata_defaultsToAudiobookGenreWhenBlank() {
@@ -64,7 +64,7 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
 
         // Assert
-        XCTAssertTrue(text.contains("genre=Audiobook\n"))
+        XCTAssertTrue(text.contains("genre=Audiobook\n"), "ffmetadata was:\n\(text)")
     }
 
     func test_ffmetadata_marksFileAsAudiobook() {
@@ -78,7 +78,7 @@ final class ChapterBuilderTests: XCTestCase {
 
         // Assert — media_type=2 becomes the mp4 `stik` atom that makes
         // Apple Books / iTunes treat the file as an audiobook.
-        XCTAssertTrue(text.contains("media_type=2\n"))
+        XCTAssertTrue(text.contains("media_type=2\n"), "ffmetadata was:\n\(text)")
     }
 
     func test_ffmetadata_seriesRidesOnAtomsTheMP4MuxerActuallyWrites() {
@@ -95,10 +95,10 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
 
         // Assert
-        XCTAssertTrue(text.contains("show=Dune Saga\n"))
-        XCTAssertTrue(text.contains("episode_sort=3\n"))
-        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3\n"))
-        XCTAssertFalse(text.contains("TXXX"))
+        XCTAssertTrue(text.contains("show=Dune Saga\n"), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("episode_sort=3\n"), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3\n"), "ffmetadata was:\n\(text)")
+        XCTAssertFalse(text.contains("TXXX"), "ffmetadata was:\n\(text)")
     }
 
     func test_ffmetadata_nonIntegerSeriesPositionSkipsEpisodeSort() {
@@ -114,8 +114,8 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
 
         // Assert — grouping still carries the human-readable form
-        XCTAssertFalse(text.contains("episode_sort="))
-        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3.5\n"))
+        XCTAssertFalse(text.contains("episode_sort="), "ffmetadata was:\n\(text)")
+        XCTAssertTrue(text.contains("grouping=Dune Saga \\#3.5\n"), "ffmetadata was:\n\(text)")
     }
 
     func test_ffmetadata_chaptersCarryConsecutiveMillisecondRanges() {
@@ -129,8 +129,14 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: chapters, metadata: BookMetadata())
 
         // Assert — first chapter 0..1499, second 1500..2999 (end inclusive)
-        XCTAssertTrue(text.contains("[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1499\ntitle=One\n"))
-        XCTAssertTrue(text.contains("[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=2999\ntitle=Two\n"))
+        XCTAssertTrue(
+            text.contains("[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1499\ntitle=One\n"),
+            "ffmetadata was:\n\(text)"
+        )
+        XCTAssertTrue(
+            text.contains("[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=2999\ntitle=Two\n"),
+            "ffmetadata was:\n\(text)"
+        )
     }
 
     func test_ffmetadata_escapesSpecialCharacters() {
@@ -143,6 +149,6 @@ final class ChapterBuilderTests: XCTestCase {
         let text = ChapterBuilder.ffmetadata(for: [], metadata: meta)
 
         // Assert
-        XCTAssertTrue(text.contains("title=A \\= B\\; C \\# D\n"))
+        XCTAssertTrue(text.contains("title=A \\= B\\; C \\# D\n"), "ffmetadata was:\n\(text)")
     }
 }

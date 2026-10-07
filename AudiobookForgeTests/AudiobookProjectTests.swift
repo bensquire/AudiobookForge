@@ -174,22 +174,29 @@ final class AudiobookProjectTests: XCTestCase {
     // MARK: - hasDraftWork
 
     func test_hasDraftWork_falseOnEmptyDraft() {
-        XCTAssertFalse(AudiobookProject().hasDraftWork)
+        // Arrange
+        let project = AudiobookProject()
+
+        // Act / Assert
+        XCTAssertFalse(project.hasDraftWork)
     }
 
     func test_hasDraftWork_trueWithChaptersButNoMetadata() {
         // Arrange — the case `canEnqueue` is false for but a reset would
         // still throw away real work.
-        let p = AudiobookProject()
-        p.chapters = [makeChapter()]
+        let project = AudiobookProject()
+        project.chapters = [makeChapter()]
 
-        // Assert
-        XCTAssertTrue(p.hasDraftWork)
+        // Act / Assert
+        XCTAssertTrue(project.hasDraftWork)
     }
 
     func test_hasDraftWork_trueWithOnlyACover() {
-        let p = AudiobookProject()
-        p.metadata.coverData = Data([0xFF, 0xD8])
-        XCTAssertTrue(p.hasDraftWork)
+        // Arrange
+        let project = AudiobookProject()
+        project.metadata.coverData = Data([0xFF, 0xD8])
+
+        // Act / Assert
+        XCTAssertTrue(project.hasDraftWork)
     }
 }

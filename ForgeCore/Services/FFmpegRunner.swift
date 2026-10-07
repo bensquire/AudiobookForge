@@ -13,11 +13,11 @@ public enum FFmpegRunner {
 
         public var errorDescription: String? {
             switch self {
-            case .notFound: "ffmpeg binary not found"
+            case .notFound: "The bundled ffmpeg is missing, so nothing was encoded."
             case let .spawnFailed(reason):
                 "Couldn't launch the bundled ffmpeg: \(reason)"
             case let .nonZeroExit(code, tail):
-                "ffmpeg exited with code \(code)\n\n…\(tail)"
+                "ffmpeg stopped with an error (exit code \(code)). Its last output:\n\n…\(tail)"
             case .cancelled: "Cancelled"
             }
         }

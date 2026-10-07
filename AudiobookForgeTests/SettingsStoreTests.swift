@@ -19,6 +19,8 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func test_load_returnsDefaultsWhenNothingStored() {
+        // Arrange — the suite is empty; `setUp` cleared it.
+
         // Act
         let loaded = SettingsStore.load(defaults: defaults)
 

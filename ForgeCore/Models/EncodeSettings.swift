@@ -122,8 +122,8 @@ public struct EncodeSettings: Equatable, Sendable {
             self = value
         }
 
-        /// dB value for the manual cases, or nil for `.off` and
-        /// `.autoNormalize` (whose value is computed at encode time).
+        /// dB value for the manual cases, or nil for `.off` and the auto
+        /// modes (whose value is computed at encode time).
         public var manualDB: Int? {
             switch self {
             case .dB3: 3

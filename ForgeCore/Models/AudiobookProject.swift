@@ -39,9 +39,8 @@ public final class AudiobookProject {
     }
 
     /// Clear chapters + metadata so the prep area is ready for the next
-    /// book. We deliberately preserve `settings` (output dir, codec,
-    /// bitrate, filename template) so the user doesn't have to re-pick
-    /// them for every queued book.
+    /// book. `settings` (output folder, bitrate, gain, filename template)
+    /// are kept so the user doesn't re-pick them for every queued book.
     public func reset() {
         chapters = []
         metadata = .init()

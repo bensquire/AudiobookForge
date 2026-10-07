@@ -30,5 +30,21 @@ print("\n".join(long_lines) or "no line over the limit")
 sys.exit(1 if long_lines else 0)
 PY_LINES
 
+# SwiftFormat has no rule against `try!`, force unwraps or implicitly unwrapped
+# optionals, so swift-format (in Xcode's toolchain) checks those three. Its own
+# layout findings follow a different style from this repo's and are filtered out;
+# files that import XCTest are exempt from the first two.
+echo
+echo "==> safety rules (swift-format: no try!, force unwrap or implicitly unwrapped optional)"
+safety="$(
+  swift format lint --configuration scripts/safety-rules.swift-format --recursive "${TARGETS[@]}" 2>&1 \
+    | grep -E '\[(NeverUseForceTry|NeverForceUnwrap|NeverUseImplicitlyUnwrappedOptionals)\]' || true
+)"
+if [[ -n "$safety" ]]; then
+  printf '%s\n' "$safety"
+  exit 1
+fi
+echo "none"
+
 echo
 echo "Lint clean."

@@ -27,14 +27,20 @@ public enum MetadataSearch {
         case httpStatus(Int)
         case insecureURL(URL)
         case coverTooLarge(Int)
+        case invalidURL(String)
 
         public var errorDescription: String? {
             switch self {
-            case .badResponse: "Unexpected response from metadata server"
-            case let .httpStatus(code): "Metadata server returned HTTP \(code)"
-            case let .insecureURL(url): "Refusing non-HTTPS metadata URL: \(url.absoluteString)"
+            case .badResponse: "The metadata server sent a reply that isn't a web response. Try the search again."
+            case let .httpStatus(code):
+                "The metadata server answered with HTTP \(code), so the search didn't complete. Try again later, "
+                    + "or pick the other provider."
+            case let .insecureURL(url): "Refused a metadata address that isn't HTTPS: \(url.absoluteString)"
             case let .coverTooLarge(bytes):
-                "Cover image is too large (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)))"
+                "The cover is \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)), "
+                    + "over the \(ByteCountFormatter.string(fromByteCount: Int64(maxCoverBytes), countStyle: .file)) limit. "
+                    + "Choose a different cover."
+            case let .invalidURL(base): "Couldn't build a metadata address from \(base)."
             }
         }
     }
@@ -89,8 +95,9 @@ public enum MetadataSearch {
         // The id came from the provider, not the user, but it still lands
         // in a URL path — accept only a well-formed ASIN so a hostile
         // record can't redirect us to `../authors/…`.
-        guard result.source == .audnexus, isASIN(result.id) else { return result }
-        let url = URL(string: "https://api.audnex.us/books/\(result.id)")!
+        guard result.source == .audnexus, isASIN(result.id),
+              let url = URL(string: "https://api.audnex.us/books/\(result.id)")
+        else { return result }
         let data = try await fetch(url)
         let book = try JSONDecoder().decode(AudnexusBook.self, from: data)
         return result.merging(book)
@@ -136,25 +143,26 @@ public enum MetadataSearch {
 
     /// `URLComponents` leaves `+` bare in query values, which both
     /// providers decode as a space — "C++" would search for "C  ".
-    static func url(_ base: String, query: [(String, String)]) -> URL {
-        var comps = URLComponents(string: base)!
+    static func url(_ base: String, query: [(String, String)]) throws -> URL {
+        guard var comps = URLComponents(string: base) else { throw SearchError.invalidURL(base) }
         comps.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
         comps.percentEncodedQuery = comps.percentEncodedQuery?
             .replacingOccurrences(of: "+", with: "%2B")
-        return comps.url!
+        guard let url = comps.url else { throw SearchError.invalidURL(base) }
+        return url
     }
 
     // MARK: - Providers
 
     private static func audnexusSearch(query: String) async throws -> [MetadataSearchResult] {
-        let url = url("https://api.audnex.us/books", query: [("name", query)])
+        let url = try url("https://api.audnex.us/books", query: [("name", query)])
         let data = try await fetch(url)
         let books = try JSONDecoder().decode([AudnexusBook].self, from: data)
         return books.map(MetadataSearchResult.init(audnexus:))
     }
 
     private static func itunesSearch(query: String) async throws -> [MetadataSearchResult] {
-        let url = url("https://itunes.apple.com/search", query: [
+        let url = try url("https://itunes.apple.com/search", query: [
             ("term", query),
             ("media", "audiobook"),
             ("limit", "10")

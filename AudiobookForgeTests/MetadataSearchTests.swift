@@ -8,11 +8,13 @@ final class MetadataSearchTests: XCTestCase {
     // MARK: - ASIN validation
 
     func test_isASIN_acceptsTenUppercaseAlphanumerics() {
+        // Arrange / Act / Assert
         XCTAssertTrue(MetadataSearch.isASIN("B08G9PRS1K"))
         XCTAssertTrue(MetadataSearch.isASIN("0000000000"))
     }
 
     func test_isASIN_rejectsPathTraversalLowercaseAndWrongLength() {
+        // Arrange / Act / Assert
         XCTAssertFalse(MetadataSearch.isASIN("../authors"))
         XCTAssertFalse(MetadataSearch.isASIN("b08g9prs1k"))
         XCTAssertFalse(MetadataSearch.isASIN("B08G9PRS1"))
@@ -22,16 +24,19 @@ final class MetadataSearchTests: XCTestCase {
 
     // MARK: - query URL construction
 
-    func test_url_percentEncodesPlusSoProvidersDoNotReadItAsSpace() {
+    func test_url_percentEncodesPlusSoProvidersDoNotReadItAsSpace() throws {
         // Arrange / Act
-        let url = MetadataSearch.url("https://example.test/search", query: [("term", "C++ for kids")])
+        let url = try MetadataSearch.url("https://example.test/search", query: [("term", "C++ for kids")])
 
         // Assert
         XCTAssertEqual(url.query, "term=C%2B%2B%20for%20kids")
     }
 
-    func test_url_keepsMultipleItemsInOrder() {
-        let url = MetadataSearch.url("https://example.test/s", query: [("a", "1"), ("b", "x y")])
+    func test_url_keepsMultipleItemsInOrder() throws {
+        // Arrange / Act
+        let url = try MetadataSearch.url("https://example.test/s", query: [("a", "1"), ("b", "x y")])
+
+        // Assert
         XCTAssertEqual(url.absoluteString, "https://example.test/s?a=1&b=x%20y")
     }
 
@@ -39,7 +44,7 @@ final class MetadataSearchTests: XCTestCase {
 
     func test_fetch_refusesNonHTTPSURLBeforeTouchingTheNetwork() async throws {
         // Arrange — a provider-supplied cover URL with a plain scheme.
-        let url = try XCTUnwrap(URL(string: "http://example.test/cover.jpg"))
+        let url = try XCTUnwrap(URL(string: "http://example.test/cover.jpg"), "the fixture URL doesn't parse")
 
         // Act / Assert
         do {

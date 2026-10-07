@@ -10,10 +10,11 @@ import UserNotifications
 /// it stays unit-testable.
 @MainActor
 enum QueueNotifier {
-    /// Without a delegate macOS silently swallows notifications while
-    /// the app is frontmost; this one opts into showing them anyway.
-    /// UNUserNotificationCenter holds its delegate weakly, so keep the
-    /// strong reference here.
+    /// A delegate's `willPresent` decides how a notification shows while
+    /// the app is frontmost; this one asks for a banner and a sound.
+    /// /documentation/usernotifications/unusernotificationcenterdelegate
+    /// The center holds its delegate weakly, so the strong reference
+    /// lives here. /documentation/usernotifications/unusernotificationcenter/delegate
     private static let presenter = ForegroundPresenter()
 
     /// Call once at app startup, before any notification is requested.

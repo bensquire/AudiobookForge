@@ -95,6 +95,7 @@ final class AudioProbeBitrateParseTests: XCTestCase {
     }
 
     func test_parse_returnsNil_onEmptyInput() {
+        // Arrange / Act / Assert
         XCTAssertNil(AudioProbe.parseBitrateFromFFmpegBanner(""))
     }
 

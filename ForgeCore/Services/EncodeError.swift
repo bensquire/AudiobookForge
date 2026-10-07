@@ -25,7 +25,8 @@ enum EncodeError: LocalizedError {
         case let .insufficientDiskSpace(required, available):
             "Not enough free space on the output volume: needs about "
                 + "\(ByteCountFormatter.string(fromByteCount: required, countStyle: .file)), "
-                + "only \(ByteCountFormatter.string(fromByteCount: available, countStyle: .file)) available."
+                + "only \(ByteCountFormatter.string(fromByteCount: available, countStyle: .file)) available. "
+                + "Free up space or choose another output folder, then retry."
         case .loudnessMeasurementFailed:
             "Auto-normalize couldn't measure the loudness of any chapter, so the book was not encoded. "
                 + "Retry, or switch gain to Off or a fixed boost."

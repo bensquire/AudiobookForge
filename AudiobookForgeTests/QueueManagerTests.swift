@@ -69,11 +69,11 @@ final class QueueManagerTests: QueueTestCase {
 
         // Act
         _ = queue.enqueue(from: first)
-        let second_item = queue.enqueue(from: second)
+        let secondItem = queue.enqueue(from: second)
 
         // Assert — second item resolves to "Dune (2).m4b" before encode
         // starts, so the user sees the renamed path on the queue row.
-        XCTAssertEqual(second_item?.spec.outputURL.lastPathComponent, "Dune (2).m4b")
+        XCTAssertEqual(secondItem?.spec.outputURL.lastPathComponent, "Dune (2).m4b")
     }
 
     // MARK: - cancel / remove
@@ -83,7 +83,10 @@ final class QueueManagerTests: QueueTestCase {
         // grab one but the second is definitely still pending)
         let queue = QueueManager()
         _ = queue.enqueue(from: makeDraft(outputDir: tmp, title: "A"))
-        let second = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")))
+        let second = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")),
+            "a complete draft should enqueue"
+        )
 
         // Act — cancel before the worker can pick it up
         queue.cancel(second)
@@ -96,7 +99,10 @@ final class QueueManagerTests: QueueTestCase {
         // Arrange — enqueue then force a "succeeded" terminal state so
         // remove() takes the immediate-delete path.
         let queue = QueueManager()
-        let item = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
+        let item = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp)),
+            "a complete draft should enqueue"
+        )
         item.status = .succeeded
 
         // Act
@@ -109,8 +115,14 @@ final class QueueManagerTests: QueueTestCase {
     func test_clearFinished_keepsActiveItems() throws {
         // Arrange
         let queue = QueueManager()
-        let a = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "A")))
-        let b = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")))
+        let a = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp, title: "A")),
+            "draft A should enqueue"
+        )
+        let b = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp, title: "B")),
+            "draft B should enqueue"
+        )
         a.status = .succeeded
         b.status = .pending
 
@@ -185,7 +197,10 @@ final class QueueManagerTests: QueueTestCase {
         // Arrange — the draft's source doesn't exist, so the worker fails
         // it in preflight almost immediately.
         let queue = QueueManager()
-        let original = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
+        let original = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp)),
+            "a complete draft should enqueue"
+        )
         try await waitUntil { original.status.isFailed }
 
         // Act
@@ -193,7 +208,7 @@ final class QueueManagerTests: QueueTestCase {
 
         // Assert — same slot, new item, and it runs (and fails) again.
         XCTAssertEqual(queue.items.count, 1)
-        let replacement = try XCTUnwrap(queue.items.first)
+        let replacement = try XCTUnwrap(queue.items.first, "retry left the queue empty")
         XCTAssertNotEqual(replacement.id, original.id)
         XCTAssertEqual(replacement.spec.outputURL, original.spec.outputURL)
         try await waitUntil { replacement.status.isFailed }
@@ -203,7 +218,10 @@ final class QueueManagerTests: QueueTestCase {
     func test_retry_ignoresItemsThatAreStillActive() throws {
         // Arrange
         let queue = QueueManager()
-        let item = try XCTUnwrap(queue.enqueue(from: makeDraft(outputDir: tmp)))
+        let item = try XCTUnwrap(
+            queue.enqueue(from: makeDraft(outputDir: tmp)),
+            "a complete draft should enqueue"
+        )
         let before = queue.items.map(\.id)
 
         // Act — pending or running items are not retryable.
@@ -226,7 +244,7 @@ final class QueueManagerTests: QueueTestCase {
         let draft = makeDraft(outputDir: outDir, title: "Long")
         draft.chapters = [chapter(SharedFixtures.tenMinuteTone, title: "Long", codec: .pcm, duration: 600)]
         let queue = QueueManager()
-        let item = try XCTUnwrap(queue.enqueue(from: draft))
+        let item = try XCTUnwrap(queue.enqueue(from: draft), "the ten-minute draft should enqueue")
         try await waitUntil { item.status.isRunning && item.progressLabel?.hasPrefix("Encoding") == true }
 
         // Act

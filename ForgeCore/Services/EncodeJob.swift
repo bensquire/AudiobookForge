@@ -190,7 +190,8 @@ public final class EncodeJob: Sendable {
             return nil
 
         case .dB3, .dB6, .dB9, .dB12:
-            return Self.gainFilter(dB: Double(spec.settings.gainBoost.manualDB!))
+            guard let dB = spec.settings.gainBoost.manualDB else { return nil }
+            return Self.gainFilter(dB: Double(dB))
 
         case .autoNormalize, .autoIfQuiet:
             onProgress(0, "Measuring loudness…")

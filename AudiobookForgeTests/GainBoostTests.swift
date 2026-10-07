@@ -15,6 +15,7 @@ final class GainBoostTests: XCTestCase {
         XCTAssertEqual(EncodeSettings.GainBoost.dB12.manualDB, 12)
         XCTAssertNil(EncodeSettings.GainBoost.off.manualDB)
         XCTAssertNil(EncodeSettings.GainBoost.autoNormalize.manualDB)
+        XCTAssertNil(EncodeSettings.GainBoost.autoIfQuiet.manualDB)
     }
 
     func test_gainBoost_isManual_trueOnlyForDBCases() {
@@ -95,28 +96,32 @@ final class GainBoostTests: XCTestCase {
         XCTAssertEqual(args[adjacent: "-c:a"], "libfdk_aac")
     }
 
-    func test_manualGainFilter_includesLimiter() {
-        // Arrange / Act / Assert — alimiter is the safety net for boosts
-        // pushing already-loud peaks past 0 dBFS.
-        XCTAssertEqual(
-            EncodeJob.manualGainFilter(dB: 6),
-            "volume=6dB,alimiter=limit=0.97"
-        )
-        XCTAssertEqual(
-            EncodeJob.manualGainFilter(dB: 12),
-            "volume=12dB,alimiter=limit=0.97"
-        )
+    func test_gainFilter_alwaysEndsWithTheLimiter() {
+        // Arrange — manual steps, an auto-normalize fraction, and a cut.
+        // alimiter is the safety net for boosts pushing already-loud
+        // peaks past 0 dBFS.
+        for dB in [3.0, 6.0, 12.0, 6.4, -3.0] {
+            // Act
+            let filter = EncodeJob.gainFilter(dB: dB)
+
+            // Assert
+            XCTAssertTrue(
+                filter.hasSuffix(",alimiter=limit=0.97"),
+                "\(dB) dB gave \(filter), with no limiter"
+            )
+        }
     }
 
     func test_gainFilter_double_formatsWholeNumbersWithoutDecimal() {
-        // Manual cases pass whole-number dB; output shouldn't have the
-        // trailing ".0" noise.
+        // Arrange / Act / Assert — manual cases pass whole-number dB;
+        // the output has no trailing ".0" noise.
         XCTAssertEqual(EncodeJob.gainFilter(dB: 6.0), "volume=6dB,alimiter=limit=0.97")
         XCTAssertEqual(EncodeJob.gainFilter(dB: -3.0), "volume=-3dB,alimiter=limit=0.97")
     }
 
     func test_gainFilter_double_keepsOneDecimalForFractionalValues() {
-        // Auto-normalize path pre-rounds to one decimal; preserve that.
+        // Arrange / Act / Assert — the auto-normalize path pre-rounds to
+        // one decimal; the filter keeps it.
         XCTAssertEqual(EncodeJob.gainFilter(dB: 3.5), "volume=3.5dB,alimiter=limit=0.97")
         XCTAssertEqual(EncodeJob.gainFilter(dB: -2.3), "volume=-2.3dB,alimiter=limit=0.97")
     }
@@ -124,15 +129,18 @@ final class GainBoostTests: XCTestCase {
     // MARK: - GainBoost.suffix (format-summary helper)
 
     func test_gainBoost_suffix_offIsEmpty() {
+        // Arrange / Act / Assert
         XCTAssertEqual(EncodeSettings.GainBoost.off.suffix, "")
     }
 
     func test_gainBoost_suffix_manualMatchesLabel() {
+        // Arrange / Act / Assert
         XCTAssertEqual(EncodeSettings.GainBoost.dB6.suffix, "+6 dB")
         XCTAssertEqual(EncodeSettings.GainBoost.dB12.suffix, "+12 dB")
     }
 
     func test_gainBoost_suffix_autoModesDescribeWhatHappened() {
+        // Arrange / Act / Assert
         XCTAssertEqual(EncodeSettings.GainBoost.autoNormalize.suffix, "auto-normalised")
         XCTAssertEqual(EncodeSettings.GainBoost.autoIfQuiet.suffix, "lifted if quiet")
     }
@@ -140,20 +148,22 @@ final class GainBoostTests: XCTestCase {
     // MARK: - gainOffsetDB (auto-normalize math)
 
     func test_gainOffsetDB_appliesTargetMinusMeasured() {
-        // Source measures -22 LUFS, target is -16 → +6 dB boost.
+        // Arrange / Act / Assert — source measures -22 LUFS, target is
+        // -16 → +6 dB boost.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.0), 6.0, accuracy: 0.001)
     }
 
     func test_gainOffsetDB_clampsLoudSource() {
-        // Source already louder than target (-10 LUFS vs -16 target).
-        // Raw offset is -6 dB — clamped to the lower bound of -6 dB.
+        // Arrange / Act / Assert — source already louder than target
+        // (-10 LUFS vs -16). Raw offset is -6 dB, the lower bound.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -10.0), -6.0, accuracy: 0.001)
         // And anything louder still: same clamp.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -5.0), -6.0, accuracy: 0.001)
     }
 
     func test_gainOffsetDB_clampsExtremelyQuietSource() {
-        // Source at -50 LUFS would want +34 dB; clamp to +20.
+        // Arrange / Act / Assert — source at -50 LUFS would want +34 dB;
+        // clamp to +20.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -50.0), 20.0, accuracy: 0.001)
     }
 
@@ -164,12 +174,14 @@ final class GainBoostTests: XCTestCase {
     }
 
     func test_gainOffsetDB_liftOnly_stillLiftsQuietBooksToTarget() {
+        // Arrange / Act / Assert
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.0, liftOnly: true), 6.0, accuracy: 0.001)
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -50.0, liftOnly: true), 20.0, accuracy: 0.001)
     }
 
     func test_gainOffsetDB_roundsToOneDecimal() {
-        // Source at -22.37 LUFS → +6.37 raw → +6.4 rounded.
+        // Arrange / Act / Assert — source at -22.37 LUFS → +6.37 raw →
+        // +6.4 rounded.
         XCTAssertEqual(EncodeJob.gainOffsetDB(from: -22.37), 6.4, accuracy: 0.001)
     }
 
@@ -194,13 +206,14 @@ final class GainBoostTests: XCTestCase {
     }
 
     func test_ebur128MeasureArgs_capsMeasurementWindow() {
-        // Per-chapter measurement is capped so a 30-chapter book doesn't
-        // spend minutes decoding hours of audio just to learn the level.
-        // The cap is documented as ~0.3 LU accurate vs full-file for
-        // typical speech content.
+        // Arrange / Act — per-chapter measurement is capped so a
+        // 30-chapter book doesn't spend minutes decoding hours of audio
+        // just to learn the level (~0.3 LU from the full-file figure).
         let args = EncodeJob.ebur128MeasureArgs(
             input: URL(fileURLWithPath: "/chapter.mp3")
         )
+
+        // Assert
         XCTAssertEqual(args[adjacent: "-t"], String(EncodeJob.ebur128MeasureCapSeconds))
         XCTAssertEqual(EncodeJob.ebur128MeasureCapSeconds, 120)
     }
@@ -261,13 +274,14 @@ final class GainBoostTests: XCTestCase {
     }
 
     func test_parseEbur128_returnsNilOnEmpty() {
+        // Arrange / Act / Assert
         XCTAssertNil(EncodeJob.parseEbur128IntegratedLUFS(""))
     }
 
     // MARK: - combineLoudness (duration-weighted average)
 
     func test_combineLoudness_identity_whenAllChaptersSameLUFS() {
-        // Arrange — every chapter at -20 LUFS, varying durations
+        // Arrange / Act — every chapter at -20 LUFS, varying durations
         let result = EncodeJob.combineLoudness(
             chapterIs: [-20.0, -20.0, -20.0],
             durations: [60, 120, 240]
@@ -278,17 +292,16 @@ final class GainBoostTests: XCTestCase {
     }
 
     func test_combineLoudness_weightedTowardLongerChapter() throws {
-        // Arrange — one short loud chapter, one long quiet chapter.
-        // The combined value should be much closer to the quiet one.
+        // Arrange / Act — one short loud chapter, one long quiet
+        // chapter. The combined value should be much closer to the quiet one.
         let result = EncodeJob.combineLoudness(
             chapterIs: [-10.0, -30.0],
             durations: [1, 99] // 1s loud, 99s quiet
         )
 
         // Assert — closer to -30 than to -10
-        XCTAssertNotNil(result)
-        let r = try XCTUnwrap(result)
-        XCTAssertLessThan(r, -25.0, "expected to be pulled toward the long quiet chapter")
+        let combined = try XCTUnwrap(result, "two finite chapters should combine to a loudness")
+        XCTAssertLessThan(combined, -25.0, "expected to be pulled toward the long quiet chapter")
     }
 
     func test_combineLoudness_nilOnEmptyInput() {
@@ -297,19 +310,21 @@ final class GainBoostTests: XCTestCase {
     }
 
     func test_combineLoudness_nilWhenAllChaptersSilent() {
-        // Arrange — ebur128 prints `-inf` for silent streams; we parse
-        // that as a non-finite Double. All-silent input should yield nil
-        // rather than crash or return -inf.
+        // Arrange / Act — ebur128 prints `-inf` for silent streams; we
+        // parse that as a non-finite Double. All-silent input should
+        // yield nil rather than crash or return -inf.
         let result = EncodeJob.combineLoudness(
             chapterIs: [-.infinity, -.infinity, .nan],
             durations: [60, 90, 30]
         )
+
+        // Assert
         XCTAssertNil(result)
     }
 
     func test_combineLoudness_skipsZeroDurationChapters() {
-        // Arrange — one zero-duration chapter shouldn't influence the
-        // average (it has no audio).
+        // Arrange / Act — one zero-duration chapter shouldn't influence
+        // the average (it has no audio).
         let result = EncodeJob.combineLoudness(
             chapterIs: [-20.0, -100.0],
             durations: [60, 0] // -100 LUFS but zero duration → ignored

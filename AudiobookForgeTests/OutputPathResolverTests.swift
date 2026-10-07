@@ -84,7 +84,7 @@ final class OutputPathResolverTests: XCTestCase {
         XCTAssertEqual(result.lastPathComponent, "README (2)")
     }
 
-    func test_uniqueURL_falsBackToUUIDAfterMaxAttempts() throws {
+    func test_uniqueURL_fallsBackToUUIDAfterMaxAttempts() throws {
         // Arrange — exhaust the numeric range so the resolver has to fall
         // through to the UUID degenerate branch
         try Data().write(to: tmp.appendingPathComponent("x.m4b"))
@@ -98,10 +98,12 @@ final class OutputPathResolverTests: XCTestCase {
             maxAttempts: 5
         )
 
-        // Assert — UUID branch matches `x (XXXXXXXX).m4b`
+        // Assert — UUID branch matches `x (XXXXXXXX).m4b`, and it is a
+        // name nothing on disk already has.
         let stem = result.deletingPathExtension().lastPathComponent
-        XCTAssertTrue(stem.hasPrefix("x ("))
-        XCTAssertTrue(stem.hasSuffix(")"))
+        XCTAssertTrue(stem.hasPrefix("x ("), "got \(result.lastPathComponent)")
+        XCTAssertTrue(stem.hasSuffix(")"), "got \(result.lastPathComponent)")
         XCTAssertEqual(result.pathExtension, "m4b")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: result.path), "fell back onto an existing file")
     }
 }

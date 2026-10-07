@@ -64,7 +64,7 @@ public final class QueueItem: Identifiable {
 
     public var status: Status = .pending
     public var progress: Double = 0
-    public var progressLabel: String? // only set while running, derived elsewhere otherwise
+    public var progressLabel: String? // set only while running
     public var finalOutputURL: URL? // set on success (may differ from spec.outputURL)
 
     init(spec: EncodeSpec,

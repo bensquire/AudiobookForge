@@ -52,13 +52,11 @@ final class LibraryScannerTests: XCTestCase {
         // Act
         let groups = LibraryScanner.discoverBooks(under: tmp)
 
-        // Assert
-        XCTAssertEqual(groups.count, 2)
-        XCTAssertEqual(groups[0].audioFiles.count, 2)
-        XCTAssertEqual(groups[1].audioFiles.count, 1)
+        // Assert — Book A's two tracks, Book B's one; the jpg is not audio
+        XCTAssertEqual(groups.map(\.audioFiles.count), [2, 1])
     }
 
-    func test_discover_mergesDiscFoldersIntoParentBook() {
+    func test_discover_mergesDiscFoldersIntoParentBook() throws {
         // Arrange — the Proxima/Ultima shape: one book split over discs
         touch("Ultima/Disk 1/01.mp3")
         touch("Ultima/Disk 1/02.mp3")
@@ -69,11 +67,12 @@ final class LibraryScannerTests: XCTestCase {
 
         // Assert — one book, all three files, identified by the parent
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups[0].path.lastPathComponent, "Ultima")
-        XCTAssertEqual(groups[0].audioFiles.count, 3)
+        let book = try XCTUnwrap(groups.first, "no book discovered")
+        XCTAssertEqual(book.path.lastPathComponent, "Ultima")
+        XCTAssertEqual(book.audioFiles.count, 3)
     }
 
-    func test_discover_loneFileDirectlyInRootIsItsOwnBook() {
+    func test_discover_loneFileDirectlyInRootIsItsOwnBook() throws {
         // Arrange — the "Artemis Fowl.m4b at library top level" shape
         touch("Artemis Fowl.m4b")
         touch("Some Series/01.mp3")
@@ -82,12 +81,14 @@ final class LibraryScannerTests: XCTestCase {
         let groups = LibraryScanner.discoverBooks(under: tmp)
 
         // Assert — the lone file is identified by the file, not the root
-        let lone = groups.first { $0.audioFiles.count == 1 && $0.path.pathExtension == "m4b" }
-        XCTAssertNotNil(lone)
-        XCTAssertEqual(lone?.path.lastPathComponent, "Artemis Fowl.m4b")
+        let lone = try XCTUnwrap(
+            groups.first { $0.audioFiles.count == 1 && $0.path.pathExtension == "m4b" },
+            "no single-file m4b book among \(groups.map(\.path.lastPathComponent))"
+        )
+        XCTAssertEqual(lone.path.lastPathComponent, "Artemis Fowl.m4b")
     }
 
-    func test_discover_ordersFilesNaturally() {
+    func test_discover_ordersFilesNaturally() throws {
         // Arrange — "10" must not sort before "2"
         touch("Book/Chapter 10.mp3")
         touch("Book/Chapter 2.mp3")
@@ -96,19 +97,17 @@ final class LibraryScannerTests: XCTestCase {
         let groups = LibraryScanner.discoverBooks(under: tmp)
 
         // Assert
-        XCTAssertEqual(
-            groups[0].audioFiles.map(\.lastPathComponent),
-            ["Chapter 2.mp3", "Chapter 10.mp3"]
-        )
+        let book = try XCTUnwrap(groups.first, "no book discovered")
+        XCTAssertEqual(book.audioFiles.map(\.lastPathComponent), ["Chapter 2.mp3", "Chapter 10.mp3"])
     }
 
     // MARK: - classification
 
-    func test_classify_looseMP3sAreNeedsForge() async {
+    func test_classify_looseMP3sAreNeedsForge() async throws {
         // Arrange
         touch("Book/01.mp3")
         touch("Book/02.mp3")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner().classify(group)
@@ -118,10 +117,10 @@ final class LibraryScannerTests: XCTestCase {
         XCTAssertEqual(record.formats, ["mp3"])
     }
 
-    func test_classify_chapteredM4BIsDone() async {
+    func test_classify_chapteredM4BIsDone() async throws {
         // Arrange
         touch("Book/book.m4b")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner(chaptered: ["book.m4b"]).classify(group)
@@ -130,52 +129,52 @@ final class LibraryScannerTests: XCTestCase {
         XCTAssertEqual(record.classification, .done)
     }
 
-    func test_classify_unchapteredM4BIsNeedsReview() async {
+    func test_classify_unchapteredM4BIsNeedsReview() async throws {
         // Arrange
         touch("Book/book.m4b")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act — probe says no chapters
         let record = await scanner().classify(group)
 
         // Assert
         XCTAssertEqual(record.classification, .needsReview)
-        XCTAssertTrue(record.reason.contains("without chapter markers"))
+        XCTAssertTrue(record.reason.contains("without chapter markers"), "reason was: \(record.reason)")
     }
 
-    func test_classify_unchapteredM4BWithCueMentionsTheCue() async {
+    func test_classify_unchapteredM4BWithCueMentionsTheCue() async throws {
         // Arrange — the Dark Diamond shape, minus the embedded chapters
         touch("Book/book.m4b")
         touch("Book/book.cue")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner().classify(group)
 
         // Assert
         XCTAssertEqual(record.classification, .needsReview)
-        XCTAssertTrue(record.reason.contains("cue"))
+        XCTAssertTrue(record.reason.contains("cue"), "reason was: \(record.reason)")
     }
 
-    func test_classify_mixedLooseAndMP4IsNeedsReview() async {
+    func test_classify_mixedLooseAndMP4IsNeedsReview() async throws {
         // Arrange — the Xeelee shape: mp3 books alongside finished m4bs
         touch("Book/01.mp3")
         touch("Book/other.m4b")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner(chaptered: ["other.m4b"]).classify(group)
 
         // Assert
         XCTAssertEqual(record.classification, .needsReview)
-        XCTAssertTrue(record.reason.contains("Mixed"))
+        XCTAssertTrue(record.reason.contains("Mixed"), "reason was: \(record.reason)")
     }
 
-    func test_classify_multipleChapteredM4AsAreDone() async {
+    func test_classify_multipleChapteredM4AsAreDone() async throws {
         // Arrange — the Reynolds shape: a folder of single-file books
         touch("Reynolds/Pushing Ice.m4a")
         touch("Reynolds/House of Suns.m4a")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner(
@@ -210,10 +209,10 @@ final class LibraryScannerTests: XCTestCase {
 extension LibraryScannerTests {
     // MARK: - chapter format recording
 
-    func test_classify_recordsChplOnlyAsWeakestFormat() async {
+    func test_classify_recordsChplOnlyAsWeakestFormat() async throws {
         // Arrange — the "Ender's Game" shape: done, but Apple-invisible
         touch("Book/book.m4b")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner(chplOnly: ["book.m4b"]).classify(group)
@@ -221,26 +220,26 @@ extension LibraryScannerTests {
         // Assert
         XCTAssertEqual(record.classification, .done)
         XCTAssertEqual(record.chapterFormat, .chpl)
-        XCTAssertTrue(record.reason.contains("chpl-only"))
+        XCTAssertTrue(record.reason.contains("chpl-only"), "reason was: \(record.reason)")
     }
 
-    func test_classify_recordsChapForFullyVisibleBook() async {
+    func test_classify_recordsChapForFullyVisibleBook() async throws {
         // Arrange
         touch("Book/book.m4b")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner(chaptered: ["book.m4b"]).classify(group)
 
         // Assert
         XCTAssertEqual(record.chapterFormat, .chap)
-        XCTAssertFalse(record.reason.contains("chpl"))
+        XCTAssertFalse(record.reason.contains("chpl"), "reason was: \(record.reason)")
     }
 
-    func test_classify_looseFilesHaveNoChapterFormat() async {
+    func test_classify_looseFilesHaveNoChapterFormat() async throws {
         // Arrange
         touch("Book/01.mp3")
-        let group = LibraryScanner.discoverBooks(under: tmp)[0]
+        let group = try XCTUnwrap(LibraryScanner.discoverBooks(under: tmp).first, "no book discovered")
 
         // Act
         let record = await scanner().classify(group)

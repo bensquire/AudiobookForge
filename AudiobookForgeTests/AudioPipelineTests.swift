@@ -112,7 +112,7 @@ final class AudioPipelineTests: FFmpegTestCase {
 
         // Assert — AAC at 64k of a single tone is loudness-transparent.
         let result = try await integratedLoudness(of: out)
-        XCTAssertEqual(result, source, accuracy: 0.5)
+        XCTAssertEqual(result, source, accuracy: 0.5, "output \(result) LUFS vs source \(source) LUFS")
     }
 
     func test_gain_manualBoost_raisesLoudnessByExactlyThatMuch() async throws {
@@ -134,7 +134,12 @@ final class AudioPipelineTests: FFmpegTestCase {
 
         // Assert
         let result = try await integratedLoudness(of: out)
-        XCTAssertEqual(result, source + 6, accuracy: 0.75)
+        XCTAssertEqual(
+            result,
+            source + 6,
+            accuracy: 0.75,
+            "output \(result) LUFS vs source \(source) LUFS + 6 dB"
+        )
     }
 
     func test_gain_manualBoost_limiterStopsClippingOnLoudSource() async throws {
@@ -158,8 +163,12 @@ final class AudioPipelineTests: FFmpegTestCase {
         // Assert — a full-scale 440 Hz sine measures around -3 LUFS; the
         // limiter at 0.97 keeps it a hair under that.
         let result = try await integratedLoudness(of: out)
-        XCTAssertGreaterThan(result, source + 3)
-        XCTAssertLessThan(result, -2.5)
+        XCTAssertGreaterThan(
+            result,
+            source + 3,
+            "output \(result) LUFS isn't 3 dB over the source's \(source)"
+        )
+        XCTAssertLessThan(result, -2.5, "output \(result) LUFS is past the limiter's ceiling")
     }
 
     /// Auto-normalize is a *book-wide* gain, not per chapter: the loud and
@@ -192,12 +201,21 @@ final class AudioPipelineTests: FFmpegTestCase {
 
         // Assert — the measurement phase ran; book on target; chapters
         // still ~12 dB apart.
-        XCTAssertTrue(labels.withLock { $0 }.contains { $0.hasPrefix("Measuring loudness") })
+        let seenLabels = labels.withLock { $0 }
+        XCTAssertTrue(
+            seenLabels.contains { $0.hasPrefix("Measuring loudness") },
+            "no measurement phase in \(seenLabels)"
+        )
         let book = try await integratedLoudness(of: out)
-        XCTAssertEqual(book, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
+        XCTAssertEqual(book, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5, "book measured \(book) LUFS")
         let outLoud = try await integratedLoudness(of: out, start: 0, duration: 3)
         let outQuiet = try await integratedLoudness(of: out, start: 3, duration: 3)
-        XCTAssertEqual(outLoud - outQuiet, sourceDelta, accuracy: 1.0)
+        XCTAssertEqual(
+            outLoud - outQuiet,
+            sourceDelta,
+            accuracy: 1.0,
+            "chapters \(outLoud) and \(outQuiet) LUFS"
+        )
     }
 
     func test_gain_autoIfQuiet_liftsQuietBookButNotLoudOne() async throws {
@@ -229,8 +247,18 @@ final class AudioPipelineTests: FFmpegTestCase {
         // Assert
         let quietResult = try await integratedLoudness(of: quietOut)
         let loudResult = try await integratedLoudness(of: loudOut)
-        XCTAssertEqual(quietResult, EncodeJob.autoNormalizeTargetLUFS, accuracy: 1.5)
-        XCTAssertEqual(loudResult, loudSource, accuracy: 0.75)
+        XCTAssertEqual(
+            quietResult,
+            EncodeJob.autoNormalizeTargetLUFS,
+            accuracy: 1.5,
+            "quiet book measured \(quietResult) LUFS"
+        )
+        XCTAssertEqual(
+            loudResult,
+            loudSource,
+            accuracy: 0.75,
+            "loud book \(loudResult) LUFS vs its source \(loudSource)"
+        )
     }
 
     // MARK: - Real MP3 input (the app's bread and butter)
@@ -251,10 +279,10 @@ final class AudioPipelineTests: FFmpegTestCase {
             XCTAssertEqual(probed.codec, .mp3, "codec of \(url.lastPathComponent)")
             XCTAssertEqual(probed.duration, p.seconds, accuracy: 0.15, "duration of \(url.lastPathComponent)")
             XCTAssertEqual(probed.title, p.name, "ID3 title of \(url.lastPathComponent)")
-            XCTAssertEqual(probed.album, "Fixture Book")
-            XCTAssertEqual(probed.artist, "Fixture Author")
+            XCTAssertEqual(probed.album, "Fixture Book", "ID3 album of \(url.lastPathComponent)")
+            XCTAssertEqual(probed.artist, "Fixture Author", "ID3 artist of \(url.lastPathComponent)")
             XCTAssertEqual(probed.bitrate, 64000, accuracy: 4000, "bitrate of \(url.lastPathComponent)")
-            XCTAssertFalse(probed.hasChapters)
+            XCTAssertFalse(probed.hasChapters, "\(url.lastPathComponent) read as chaptered")
             chapters.append(ChapterImport.chapter(for: url, probed: probed))
         }
         let job = EncodeJob(spec: makeSpec(in: tmp, chapters: chapters, bitrate: .source))
@@ -296,7 +324,13 @@ final class AudioPipelineTests: FFmpegTestCase {
             // both boundaries and the AAC priming samples.
             let window = min(1.0, p.seconds * 0.5)
             let mid = expectedStart + p.seconds / 2 - window / 2
-            let hz = try await dominantFrequency(of: out, start: mid, duration: window)
+            let hz = try await dominantFrequency(
+                of: out,
+                start: mid,
+                duration: window,
+                file: file,
+                line: line
+            )
             XCTAssertEqual(hz, p.hz, accuracy: p.hz * 0.05, "audio inside \(p.name)", file: file, line: line)
             expectedStart += p.seconds
         }

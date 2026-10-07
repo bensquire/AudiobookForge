@@ -23,9 +23,14 @@ final class MetadataDTOTests: XCTestCase {
     """.utf8)
 
     func test_audnexus_mapsSearchRecord() throws {
+        // Arrange — the trimmed capture in `audnexusJSON`.
+
         // Act
         let books = try JSONDecoder().decode([AudnexusBook].self, from: audnexusJSON)
-        let result = try MetadataSearchResult(audnexus: XCTUnwrap(books.first))
+        let result = try MetadataSearchResult(audnexus: XCTUnwrap(
+            books.first,
+            "the JSON decoded to no books"
+        ))
 
         // Assert
         XCTAssertEqual(result.id, "B08G9PRS1K")
@@ -46,7 +51,10 @@ final class MetadataDTOTests: XCTestCase {
 
         // Act
         let books = try JSONDecoder().decode([AudnexusBook].self, from: json)
-        let result = try MetadataSearchResult(audnexus: XCTUnwrap(books.first))
+        let result = try MetadataSearchResult(audnexus: XCTUnwrap(
+            books.first,
+            "the JSON decoded to no books"
+        ))
 
         // Assert
         XCTAssertEqual(result.author, "")
@@ -57,10 +65,19 @@ final class MetadataDTOTests: XCTestCase {
     }
 
     func test_audnexus_multipleAuthorsAreJoined() throws {
+        // Arrange
         let json = Data(#"[{"asin": "B000000000", "title": "T", "authors": [{"name": "A"}, {"name": "B"}]}]"#
             .utf8)
+
+        // Act
         let books = try JSONDecoder().decode([AudnexusBook].self, from: json)
-        XCTAssertEqual(try MetadataSearchResult(audnexus: XCTUnwrap(books.first)).author, "A, B")
+        let result = try MetadataSearchResult(audnexus: XCTUnwrap(
+            books.first,
+            "the JSON decoded to no books"
+        ))
+
+        // Assert
+        XCTAssertEqual(result.author, "A, B")
     }
 
     func test_audnexus_mergingPrefersRicherEnrichedFields() throws {
@@ -72,7 +89,7 @@ final class MetadataDTOTests: XCTestCase {
         let books = try JSONDecoder().decode([AudnexusBook].self, from: audnexusJSON)
 
         // Act
-        let merged = try searchHit.merging(XCTUnwrap(books.first))
+        let merged = try searchHit.merging(XCTUnwrap(books.first, "the JSON decoded to no books"))
 
         // Assert — existing non-nil fields are kept, gaps are filled.
         XCTAssertEqual(merged.author, "A")
@@ -100,7 +117,10 @@ final class MetadataDTOTests: XCTestCase {
 
         // Act
         let envelope = try JSONDecoder().decode(ITunesEnvelope.self, from: json)
-        let result = try MetadataSearchResult(itunes: XCTUnwrap(envelope.results.first))
+        let result = try MetadataSearchResult(itunes: XCTUnwrap(
+            envelope.results.first,
+            "the JSON decoded to no results"
+        ))
 
         // Assert
         XCTAssertEqual(result.id, "1552184040")
@@ -112,10 +132,18 @@ final class MetadataDTOTests: XCTestCase {
         XCTAssertNil(result.narrator)
     }
 
-    func test_itunes_missingCollectionIdGetsAStableFallbackId() throws {
+    func test_itunes_missingCollectionIdGetsAFallbackId() throws {
+        // Arrange
         let json = Data(#"{"results": [{"collectionName": "X"}]}"#.utf8)
+
+        // Act
         let envelope = try JSONDecoder().decode(ITunesEnvelope.self, from: json)
-        let result = try MetadataSearchResult(itunes: XCTUnwrap(envelope.results.first))
+        let result = try MetadataSearchResult(itunes: XCTUnwrap(
+            envelope.results.first,
+            "the JSON decoded to no results"
+        ))
+
+        // Assert
         XCTAssertFalse(result.id.isEmpty)
         XCTAssertEqual(result.author, "")
     }

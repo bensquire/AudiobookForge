@@ -65,9 +65,9 @@ final class ParallelEncodeTests: XCTestCase {
     }
 
     func test_phase1Args_capsPerProcessThreadsToOne() {
-        // Per-chunk encoders should NOT use `-threads 0` — that would
-        // make each ffmpeg try to grab every core, fighting our
-        // parallel-chunk fan-out. One thread per chunk is the contract.
+        // Arrange / Act — per-chunk encoders use one thread each: `-threads
+        // 0` would make every ffmpeg grab every core and fight the
+        // chapter fan-out.
         let args = EncodeJob.phase1Args(
             input: URL(fileURLWithPath: "/x.mp3"),
             output: URL(fileURLWithPath: "/y.m4a"),
@@ -75,6 +75,8 @@ final class ParallelEncodeTests: XCTestCase {
             sampleRate: 44100,
             channels: 2
         )
+
+        // Assert
         XCTAssertEqual(args[adjacent: "-threads"], "1")
     }
 
@@ -106,7 +108,7 @@ final class ParallelEncodeTests: XCTestCase {
     }
 
     func test_phase2Args_omitsCoverMappingWhenAbsent() {
-        // Arrange — no cover
+        // Arrange / Act — no cover
         let args = EncodeJob.phase2Args(
             intermediatesListURL: URL(fileURLWithPath: "/work/intermediates.txt"),
             metaURL: URL(fileURLWithPath: "/work/ffmetadata.txt"),
@@ -125,27 +127,27 @@ final class ParallelEncodeTests: XCTestCase {
 
     func test_progressAggregator_sumsAcrossChunks() async {
         // Arrange — three 60s chunks totalling 180s
-        let agg = ProgressAggregator(chunkDurations: [60, 60, 60])
+        let aggregator = ProgressAggregator(chunkDurations: [60, 60, 60])
 
         // Act — report partial progress on each
-        await agg.report(chunk: 0, seconds: 30)
-        await agg.report(chunk: 1, seconds: 30)
+        await aggregator.report(chunk: 0, seconds: 30)
+        await aggregator.report(chunk: 1, seconds: 30)
 
         // Assert — 60 of 180 done; phase1 caps the bar at 0.95
-        let frac = await agg.phase1Fraction
+        let frac = await aggregator.phase1Fraction
         XCTAssertEqual(frac, (60.0 / 180.0) * 0.95, accuracy: 0.001)
     }
 
     func test_progressAggregator_ignoresOutOfRangeChunkIndex() async {
         // Arrange — only one chunk registered, but a stale report claims
         // a chunk index that doesn't exist.
-        let agg = ProgressAggregator(chunkDurations: [10])
+        let aggregator = ProgressAggregator(chunkDurations: [10])
 
         // Act
-        await agg.report(chunk: 5, seconds: 5)
+        await aggregator.report(chunk: 5, seconds: 5)
 
         // Assert — out-of-range silently ignored; nothing added.
-        let frac = await agg.phase1Fraction
+        let frac = await aggregator.phase1Fraction
         XCTAssertEqual(frac, 0)
     }
 
@@ -153,30 +155,30 @@ final class ParallelEncodeTests: XCTestCase {
         // Arrange — one chunk wildly over-reports, another only partially
         // done. The over-reporter must clamp to its own duration (10s),
         // not pull the bar over 100%. And the aggregate stays ≤ 0.95.
-        let agg = ProgressAggregator(chunkDurations: [10, 10, 10])
+        let aggregator = ProgressAggregator(chunkDurations: [10, 10, 10])
 
         // Act
-        await agg.report(chunk: 0, seconds: 9999) // way over its 10s
-        await agg.report(chunk: 1, seconds: 5) // half done
+        await aggregator.report(chunk: 0, seconds: 9999) // way over its 10s
+        await aggregator.report(chunk: 1, seconds: 5) // half done
         // chunk 2 not reported
 
         // Assert — clamped sum = 10 + 5 = 15 out of 30 total = 0.5,
         // scaled by phase-1 ceiling 0.95 = 0.475.
-        let frac = await agg.phase1Fraction
+        let frac = await aggregator.phase1Fraction
         XCTAssertEqual(frac, (15.0 / 30.0) * 0.95, accuracy: 0.001)
     }
 
     func test_progressAggregator_neverExceedsPhase1Ceiling_whenAllOverReport() async {
         // Arrange — every chunk over-reports
-        let agg = ProgressAggregator(chunkDurations: [30, 30, 30])
+        let aggregator = ProgressAggregator(chunkDurations: [30, 30, 30])
 
         // Act
-        await agg.report(chunk: 0, seconds: 1000)
-        await agg.report(chunk: 1, seconds: 1000)
-        await agg.report(chunk: 2, seconds: 1000)
+        await aggregator.report(chunk: 0, seconds: 1000)
+        await aggregator.report(chunk: 1, seconds: 1000)
+        await aggregator.report(chunk: 2, seconds: 1000)
 
         // Assert
-        let frac = await agg.phase1Fraction
+        let frac = await aggregator.phase1Fraction
         XCTAssertEqual(frac, 0.95, accuracy: 0.001)
     }
 
@@ -184,15 +186,15 @@ final class ParallelEncodeTests: XCTestCase {
         // Arrange — ffmpeg can report time= going backwards briefly when
         // a B-frame batch flushes. Aggregator keeps the max so the bar
         // is monotonic.
-        let agg = ProgressAggregator(chunkDurations: [60])
+        let aggregator = ProgressAggregator(chunkDurations: [60])
 
         // Act
-        await agg.report(chunk: 0, seconds: 40)
-        await agg.report(chunk: 0, seconds: 30) // older / smaller
-        await agg.report(chunk: 0, seconds: 50) // newer / bigger
+        await aggregator.report(chunk: 0, seconds: 40)
+        await aggregator.report(chunk: 0, seconds: 30) // older / smaller
+        await aggregator.report(chunk: 0, seconds: 50) // newer / bigger
 
         // Assert
-        let frac = await agg.phase1Fraction
+        let frac = await aggregator.phase1Fraction
         XCTAssertEqual(frac, (50.0 / 60.0) * 0.95, accuracy: 0.001)
     }
 
@@ -221,8 +223,8 @@ final class ParallelEncodeTests: XCTestCase {
 
         // Assert — never more than the cap simultaneously
         let observed = await watcher.maxConcurrent
-        XCTAssertLessThanOrEqual(observed, 4)
-        XCTAssertGreaterThan(observed, 0)
+        XCTAssertLessThanOrEqual(observed, 4, "\(observed) tasks held the limiter at once with a cap of 4")
+        XCTAssertGreaterThan(observed, 0, "no task ever acquired the limiter")
     }
 }
 

@@ -214,12 +214,21 @@ func loadCommonTitle(_ asset: AVURLAsset) async throws -> String? {
 /// same ebur128 pass the encoder uses. Whole file when `start`/`duration`
 /// are nil.
 func integratedLoudness(
-    of url: URL, start: TimeInterval? = nil, duration: TimeInterval? = nil
+    of url: URL, start: TimeInterval? = nil, duration: TimeInterval? = nil,
+    file: StaticString = #filePath, line: UInt = #line
 ) async throws -> Double {
     let args = EncodeJob.ebur128MeasureArgs(input: url, start: start, duration: duration)
     let captured = await FFmpegRunner.captureStderr(arguments: args)
-    let stderr = try XCTUnwrap(captured)
-    return try XCTUnwrap(EncodeJob.parseEbur128IntegratedLUFS(stderr), "no ebur128 summary in:\n\(stderr)")
+    let stderr = try XCTUnwrap(
+        captured,
+        "ffmpeg produced no stderr measuring \(url.lastPathComponent)",
+        file: file,
+        line: line
+    )
+    return try XCTUnwrap(
+        EncodeJob.parseEbur128IntegratedLUFS(stderr), "no ebur128 summary in:\n\(stderr)", file: file,
+        line: line
+    )
 }
 
 /// Estimate the dominant frequency of a window of `url` by decoding it
@@ -227,10 +236,18 @@ func integratedLoudness(
 /// use) and counting zero crossings. Exact enough for a single sine tone
 /// (within ~2%), which is all the fixtures contain — and enough to prove
 /// which chapter's audio landed where.
-func dominantFrequency(of url: URL, start: TimeInterval, duration: TimeInterval) async throws -> Double {
+func dominantFrequency(
+    of url: URL, start: TimeInterval, duration: TimeInterval,
+    file: StaticString = #filePath, line: UInt = #line
+) async throws -> Double {
     let asset = AVURLAsset(url: url)
     let tracks = try await asset.loadTracks(withMediaType: .audio)
-    let track = try XCTUnwrap(tracks.first, "no audio track")
+    let track = try XCTUnwrap(
+        tracks.first,
+        "no audio track in \(url.lastPathComponent)",
+        file: file,
+        line: line
+    )
     let reader = try AVAssetReader(asset: asset)
     reader.timeRange = CMTimeRange(
         start: CMTime(seconds: start, preferredTimescale: 44100),
@@ -246,7 +263,10 @@ func dominantFrequency(of url: URL, start: TimeInterval, duration: TimeInterval)
         AVSampleRateKey: 44100
     ])
     reader.add(output)
-    XCTAssertTrue(reader.startReading(), "AVAssetReader failed to start: \(String(describing: reader.error))")
+    XCTAssertTrue(
+        reader.startReading(), "AVAssetReader failed to start: \(String(describing: reader.error))",
+        file: file, line: line
+    )
 
     var samples: [Int16] = []
     while let buffer = output.copyNextSampleBuffer() {
@@ -261,7 +281,11 @@ func dominantFrequency(of url: URL, start: TimeInterval, duration: TimeInterval)
         samples += bytes.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
     }
     guard samples.count > 4410 else {
-        XCTFail("decoded window is too short: \(samples.count) samples (reader: \(reader.status.rawValue))")
+        XCTFail(
+            "decoded window is too short: \(samples.count) samples (reader: \(reader.status.rawValue))",
+            file: file,
+            line: line
+        )
         return 0
     }
     var crossings = 0

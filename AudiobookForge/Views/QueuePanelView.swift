@@ -85,7 +85,7 @@ private struct QueueRow: View {
                         Text(item.title.isEmpty ? "Untitled" : item.title)
                             .font(.callout).bold()
                             .lineLimit(1)
-                        Text(item.author.isEmpty ? "Unknown" : item.author)
+                        Text(item.author.isEmpty ? "Unknown Author" : item.author)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "rules": {
+        "AlwaysUseLowerCamelCase": false,
+        "DoNotUseSemicolons": false,
+        "NeverForceUnwrap": true,
+        "NeverUseForceTry": true,
+        "NeverUseImplicitlyUnwrappedOptionals": true,
+        "OrderedImports": false,
+        "NoBlockComments": false,
+        "UseShorthandTypeNames": false
+    }
+}

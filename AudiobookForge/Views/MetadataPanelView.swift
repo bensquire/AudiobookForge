@@ -240,17 +240,15 @@ struct MetadataPanelView: View {
 private struct SearchResultRow: View {
     let result: MetadataSearchResult
     let onApply: () -> Void
+    /// Fetched through `MetadataSearch.fetchCover`, so a thumbnail gets the
+    /// same HTTPS-only, 15 s, 20 MB guards and ephemeral session as the
+    /// cover that is applied, and nothing lands in the shared URL cache.
+    @State private var coverData: Data?
 
     var body: some View {
         Button(action: onApply) {
             HStack(alignment: .top, spacing: 8) {
-                AsyncImage(url: result.coverURL) { img in
-                    img.resizable().scaledToFit()
-                } placeholder: {
-                    Color.gray.opacity(0.15)
-                }
-                .frame(width: 38, height: 38)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                CoverThumbnail(data: coverData, size: 38, cornerRadius: 4)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(result.title).font(.callout).lineLimit(1)
@@ -266,5 +264,9 @@ private struct SearchResultRow: View {
         }
         .accessibilityIdentifier("metadata.searchResult")
         .buttonStyle(.plain)
+        .task(id: result.coverURL) {
+            guard let url = result.coverURL else { return }
+            coverData = try? await MetadataSearch.fetchCover(url)
+        }
     }
 }

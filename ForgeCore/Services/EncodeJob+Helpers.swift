@@ -91,12 +91,6 @@ extension EncodeJob {
         return "volume=\(formatted)dB,alimiter=limit=0.97"
     }
 
-    /// Deprecated alias — keep the old `Int`-only entry point for the
-    /// existing test surface. New code should call `gainFilter(dB:)`.
-    static func manualGainFilter(dB: Int) -> String {
-        gainFilter(dB: Double(dB))
-    }
-
     static func phase2Args(
         intermediatesListURL: URL, metaURL: URL, coverURL: URL?, outputURL: URL
     ) -> [String] {

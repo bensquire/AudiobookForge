@@ -53,10 +53,11 @@ final class SecurityScopeTests: XCTestCase {
 
         // Act
         SecurityScope.retain(url("/books/ch1.mp3"))
+        let heldAfterRetain = SecurityScope.heldCount
+        SecurityScope.releaseAll()
 
         // Assert — nothing was granted, so nothing is owed a stop.
-        XCTAssertEqual(SecurityScope.heldCount, 0)
-        SecurityScope.releaseAll()
+        XCTAssertEqual(heldAfterRetain, 0)
         XCTAssertTrue(stopped.isEmpty, "stopped a grant that was never started: \(stopped)")
     }
 

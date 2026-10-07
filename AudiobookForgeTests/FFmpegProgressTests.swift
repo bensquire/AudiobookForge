@@ -6,7 +6,10 @@ import XCTest
 /// redraws its stats line in place, so every in-flight report ends in a
 /// bare `\r` and only the last one in `\n`. These tests exist because the
 /// buffer once split on `\n` alone and the bar sat at 0% for whole encodes.
-final class FFmpegProgressTests: FFmpegTestCase {
+///
+/// The parsing is pinned on bytes and strings, so it runs whether or not
+/// the bundled ffmpeg is built; only `FFmpegProgressTests` needs it.
+final class FFmpegProgressParsingTests: XCTestCase {
     // MARK: - LineBuffer
 
     func test_lineBuffer_yieldsCarriageReturnTerminatedLines() {
@@ -57,15 +60,17 @@ final class FFmpegProgressTests: FFmpegTestCase {
 
         // Act
         let lines = buffer.append(Data("a\nb\nc".utf8))
+        let afterTerminator = buffer.append(Data("\n".utf8))
 
         // Assert — trailing partial line is retained until terminated.
         XCTAssertEqual(lines, ["a", "b"])
-        XCTAssertEqual(buffer.append(Data("\n".utf8)), ["c"])
+        XCTAssertEqual(afterTerminator, ["c"])
     }
 
     // MARK: - parseTime
 
     func test_parseTime_readsHoursMinutesSeconds() {
+        // Arrange / Act / Assert
         XCTAssertEqual(
             FFmpegRunner.parseTime("size=  480KiB time=01:02:03.50 bitrate=65.5kbits/s"),
             3723.5
@@ -73,10 +78,13 @@ final class FFmpegProgressTests: FFmpegTestCase {
     }
 
     func test_parseTime_nilWithoutTimeToken() {
+        // Arrange / Act / Assert
         XCTAssertNil(FFmpegRunner.parseTime("Stream mapping:"))
         XCTAssertNil(FFmpegRunner.parseTime("time=N/A bitrate=N/A"))
     }
+}
 
+final class FFmpegProgressTests: FFmpegTestCase {
     // MARK: - end to end against the bundled ffmpeg
 
     /// A real encode must surface intermediate progress, not one callback
@@ -111,8 +119,14 @@ final class FFmpegProgressTests: FFmpegTestCase {
         XCTAssertGreaterThanOrEqual(seen.count, 3, "expected multiple progress reports, got \(seen)")
         XCTAssertEqual(seen, seen.sorted(), "progress went backwards: \(seen)")
         XCTAssertTrue(seen.contains { $0 > 0.05 && $0 < 0.95 }, "no intermediate progress: \(seen)")
-        XCTAssertEqual(seen.last ?? 0, 1.0, accuracy: 0.02)
+        XCTAssertEqual(seen.last ?? 0, 1.0, accuracy: 0.02, "last report wasn't the end: \(seen)")
         // The seconds channel is the same reports in ffmpeg's own units.
-        XCTAssertEqual(secondsSeen.withLock { $0 }.last ?? 0, seconds, accuracy: 1.5)
+        let secondsReported = secondsSeen.withLock { $0 }
+        XCTAssertEqual(
+            secondsReported.last ?? 0,
+            seconds,
+            accuracy: 1.5,
+            "seconds reported: \(secondsReported)"
+        )
     }
 }
